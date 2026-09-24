@@ -49,74 +49,87 @@ window.CloudAuth = (() => {
         if (!user) return null;
         return await getProfile(user.id);
     }
+    const INTERNAL_USER_DOMAIN = "pasdashboard.local";
+
+    function normalizeUsername(value) {
+        return String(value || "").trim().toLowerCase();
+    }
+
+    function usernameToAuthEmail(username) {
+        const clean = normalizeUsername(username);
+        return `${clean}@${INTERNAL_USER_DOMAIN}`;
+    }
+
     async function signIn(identifier, password) {
         if (!client) return { ok:false, error:"Cloud authentication is not configured." };
-        const email = identifier.trim();
+        const raw = identifier.trim();
+        // Main Account signs in with its real email address.
+        // Additional dashboard users sign in with username only; the dashboard
+        // maps that username to an internal Supabase Auth email automatically.
+        const email = raw.includes("@") ? raw : usernameToAuthEmail(raw);
         const { data, error } = await client.auth.signInWithPassword({ email, password });
-        if (error) return { ok:false, error:error.message };
+        if (error) return { ok:false, error:"Invalid username/email or password." };
         const p = await getProfile(data.user.id);
         if (!p) { await client.auth.signOut(); return { ok:false, error:"User profile is not configured." }; }
+        // Main Account must use its real email. Non-main accounts may use username.
+        if (p.is_main && !raw.includes("@")) {
+            await client.auth.signOut();
+            return { ok:false, error:"The Main Account must sign in with its email address." };
+        }
         return { ok:true, user:data.user, profile:p };
     }
     async function signOut() {
         if (client) await client.auth.signOut();
         profile = null;
     }
-    async function createUser(email, password, role) {
-    if (!client) return { ok:false, error:"Cloud authentication is not configured." };
+    async function createUser(username, password, role) {
+        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
+        const { data: current } = await client.auth.getUser();
+        if (!current?.user) return { ok:false, error:"Main Account session required." };
+        const adminProfile = await getProfile(current.user.id);
+        if (adminProfile?.role !== "admin" || adminProfile?.is_main !== true) return { ok:false, error:"Only the Main Account can create users." };
 
-    const { data: current } = await client.auth.getUser();
-    if (!current?.user) return { ok:false, error:"Admin session required." };
-
-    const adminProfile = await getProfile(current.user.id);
-    if (adminProfile?.role !== "admin" || adminProfile?.is_main !== true) {
-    return { ok:false, error:"Only the Main Account can create users." };
-}
-
-    const { data: oldSession } = await client.auth.getSession();
-
-    const { data, error } = await client.auth.signUp({
-        email,
-        password
-    });
-
-    if (error) return { ok:false, error:error.message };
-
-    if (oldSession?.session) {
-        await client.auth.setSession(oldSession.session);
-    }
-
-    if (data?.user?.id) {
-        await new Promise(r => setTimeout(r, 500));
-
-        const selectedRole =
-            role === "admin" ? "admin" : "viewer";
-
-        const { error: profileError } = await client.rpc(
-            "create_dashboard_account_profile",
-            {
-                target_user_id: data.user.id,
-                target_email: email,
-                new_role: selectedRole
-            }
-        );
-
-        if (profileError) {
-            return {
-                ok:false,
-                error:profileError.message
-            };
+        const cleanUsername = normalizeUsername(username);
+        if (!/^[a-z0-9][a-z0-9._-]{2,30}$/.test(cleanUsername)) {
+            return { ok:false, error:"Username must be 3-31 characters using letters, numbers, dot, dash, or underscore." };
         }
-    }
+        if (cleanUsername === normalizeUsername(adminProfile.username) || cleanUsername.includes("@")) {
+            return { ok:false, error:"Choose a different username." };
+        }
 
-    profile = adminProfile;
-    return { ok:true, user:data.user };
-}
+        const { data: existing } = await client.from("profiles")
+            .select("id,is_main")
+            .eq("username", cleanUsername)
+            .maybeSingle();
+        if (existing) return { ok:false, error:"That username already exists." };
+
+        // Supabase Auth requires an email-shaped identity. For non-main users we
+        // generate a private internal address. The user never needs to know it.
+        const internalEmail = usernameToAuthEmail(cleanUsername);
+        const { data: oldSession } = await client.auth.getSession();
+        const { data, error } = await client.auth.signUp({
+            email: internalEmail,
+            password
+        });
+        if (error) return { ok:false, error:error.message };
+
+        // signUp can temporarily switch the browser session to the new user.
+        if (oldSession?.session) await client.auth.setSession(oldSession.session);
+        if (data?.user?.id) {
+            await new Promise(r => setTimeout(r, 300));
+            const { error: profileError } = await client.from("profiles")
+                .update({ username: cleanUsername, role: role === "admin" ? "admin" : "viewer", is_main: false })
+                .eq("id", data.user.id);
+            if (profileError) return { ok:false, error:profileError.message };
+        }
+        profile = adminProfile;
+        return { ok:true, user:data.user, username:cleanUsername };
+    }
     async function setRole(userId, role) {
         if (!client) return { ok:false, error:"Cloud authentication is not configured." };
         const { data: current } = await client.auth.getUser();
         const me = await getProfile(current?.user?.id);
-        if (me?.role !== "admin" || me?.is_main !== true) return {ok:false,error:"Only the Main Account can manage users."};
+        if (me?.role !== "admin" || me?.is_main !== true) return { ok:false, error:"Only the Main Account can manage users." };
         const { error } = await client.from("profiles").update({ role: role === "admin" ? "admin" : "viewer" }).eq("id", userId);
         return error ? {ok:false,error:error.message} : {ok:true};
     }
@@ -208,7 +221,7 @@ window.CloudSync = (() => {
                 auth: {
                     persistSession: false,
                     autoRefreshToken: true,
-                    detectSessionInUrl: false
+                    detectSessionInUrl: true
                 }
             }
         );
@@ -1471,13 +1484,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             <!-- ADD / MANAGE SUB-USERS SECTION (Main Account Authority) -->
             <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-3">
                 <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-user-plus text-emerald-400 mr-1.5"></i> Authorized Operators / Users</h4>
-                <p class="text-[11px] text-slate-400">Add authorized user profiles who can open and view the application.</p>
+                <p class="text-[11px] text-slate-400">Create additional accounts using a username and password only. The Main Account continues to use its email address.</p>
 
                 <form onsubmit="handleAddUserSubmit(event)" class="space-y-3 text-xs pt-1">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
                         <div>
                             <label class="block text-slate-300 font-semibold mb-1">Username *</label>
                             <input type="text" id="new-user-name" required placeholder="Username" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
+                            <p class="text-[9px] text-slate-500 mt-1">Username only — no email required.</p>
                         </div>
                         <div>
                             <label class="block text-slate-300 font-semibold mb-1">Password *</label>
@@ -1491,7 +1505,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             </select>
                         </div>
                     </div>
-                    <p class="text-[10px] text-slate-500">Full Access users can use the same editing, adding, deleting, calibration, uptime, project, and user-management functions as the main account. View Only users can view records without changing them.</p>
+                    <p class="text-[10px] text-slate-500">Full Access users can edit dashboard records but cannot manage users. View Only users can view records without changing them. Only the Main Account can create or manage accounts.</p>
                     <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-xl transition shadow-md">
                         Add User Account
                     </button>
@@ -1674,18 +1688,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         let AUTH_PASS = "PASPASPAS";
         let additionalUsers = [];
         let CURRENT_ROLE = "admin";
-let CURRENT_IS_MAIN = false;
+        let CURRENT_IS_MAIN = false;
 
-function isAdminUser() {
-    return CURRENT_ROLE === "admin";
-}
+        function isAdminUser() {
+            return CURRENT_ROLE === "admin";
+        }
 
-function isMainAccount() {
-    return CURRENT_IS_MAIN === true;
-}
+        function isMainAccount() {
+            return CURRENT_IS_MAIN === true;
+        }
 
         function applyAccessUI() {
             const isAdmin = isAdminUser();
+            const isMain = isMainAccount();
             const appContent = document.getElementById("app-content");
             if (appContent) appContent.classList.toggle("viewer-mode", !isAdmin);
 
@@ -1728,16 +1743,17 @@ function isMainAccount() {
             const loggedUser = sessionStorage.getItem("logged_user");
             const loggedRole = sessionStorage.getItem("logged_role") || (loggedUser === AUTH_USER ? "admin" : "viewer");
             const loggedIsMain = sessionStorage.getItem("logged_is_main") === "true";
-            CURRENT_IS_MAIN = loggedIsMain;
 
             if (isAuth) {
                 CURRENT_ROLE = loggedRole;
+                CURRENT_IS_MAIN = loggedIsMain;
                 document.getElementById("login-screen").classList.add("hidden");
                 document.getElementById("app-content").classList.remove("hidden");
                 applyAccessUI();
                 initApp();
             } else {
                 CURRENT_ROLE = "viewer";
+                CURRENT_IS_MAIN = false;
                 document.getElementById("app-content").classList.remove("viewer-mode");
                 document.getElementById("login-screen").classList.remove("hidden");
                 document.getElementById("app-content").classList.add("hidden");
@@ -1756,8 +1772,8 @@ function isMainAccount() {
                     sessionStorage.setItem("authenticated", "true");
                     sessionStorage.setItem("logged_user", result.profile.email || u);
                     sessionStorage.setItem("logged_role", result.profile.role === "admin" ? "admin" : "viewer");
-                    CURRENT_ROLE = result.profile.role === "admin" ? "admin" : "viewer";
                     sessionStorage.setItem("logged_is_main", result.profile.is_main ? "true" : "false");
+                    CURRENT_ROLE = result.profile.role === "admin" ? "admin" : "viewer";
                     CURRENT_IS_MAIN = result.profile.is_main === true;
                     err.classList.add("hidden");
                     checkAuth();
@@ -1780,7 +1796,9 @@ function isMainAccount() {
                 sessionStorage.setItem("authenticated", "true");
                 sessionStorage.setItem("logged_user", u);
                 sessionStorage.setItem("logged_role", role);
+                sessionStorage.setItem("logged_is_main", u === AUTH_USER ? "true" : "false");
                 CURRENT_ROLE = role;
+                CURRENT_IS_MAIN = u === AUTH_USER;
                 err.classList.add("hidden");
                 checkAuth();
             } else {
@@ -1795,8 +1813,8 @@ function isMainAccount() {
             sessionStorage.removeItem("logged_user");
             sessionStorage.removeItem("logged_role");
             sessionStorage.removeItem("logged_is_main");
-            CURRENT_IS_MAIN = false;
             CURRENT_ROLE = "viewer";
+            CURRENT_IS_MAIN = false;
             document.getElementById("login-username").value = "";
             document.getElementById("login-password").value = "";
             checkAuth();
@@ -1865,15 +1883,15 @@ function isMainAccount() {
         async function handleAddUserSubmit(e) {
             e.preventDefault();
             if (!isMainAccount()) return;
-            const email = document.getElementById("new-user-name").value.trim();
+            const username = document.getElementById("new-user-name").value.trim();
             const upass = document.getElementById("new-user-pass").value;
             const roleEl = document.getElementById("new-user-role");
             const role = roleEl ? roleEl.value : "viewer";
-            if (!email || !upass) return;
+            if (!username || !upass) return;
 
             if (await cloudAuthEnabled()) {
-                if (!email.includes("@")) { alert("Cloud accounts require a valid email address."); return; }
-                const result = await window.CloudAuth.createUser(email, upass, role);
+                if (username.includes("@")) { alert("Additional users use a username only. Do not enter an email address."); return; }
+                const result = await window.CloudAuth.createUser(username, upass, role);
                 if (!result.ok) { alert(result.error || "Unable to create user."); return; }
                 document.getElementById("new-user-name").value = "";
                 document.getElementById("new-user-pass").value = "";
@@ -1883,10 +1901,10 @@ function isMainAccount() {
                 return;
             }
 
-            if (email === AUTH_USER || additionalUsers.some(u => u.username === email)) {
+            if (username === AUTH_USER || additionalUsers.some(u => u.username === username)) {
                 alert("Username already exists or is reserved."); return;
             }
-            additionalUsers.push({ username: email, password: upass, role });
+            additionalUsers.push({ username, password: upass, role });
             localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
             document.getElementById("new-user-name").value = "";
             document.getElementById("new-user-pass").value = "";
@@ -1913,7 +1931,7 @@ function isMainAccount() {
                     item.className = "flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2 rounded-xl text-xs gap-2";
                     item.innerHTML = `
                         <div class="min-w-0">
-                            <div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.email || usr.username || "User")}</div>
+                            <div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.username || "User")}</div>
                             <div class="text-[9px] ${isFull ? "text-emerald-400" : "text-amber-400"} ml-5 font-bold">${isFull ? "Full Access" : "View Only"}</div>
                         </div>
                         <div class="flex items-center gap-1">
@@ -2037,6 +2055,13 @@ function isMainAccount() {
         let chartDowntimePareto = null;
 
         window.onload = function() {
+            // Require login again after every browser refresh.
+            sessionStorage.removeItem("authenticated");
+            sessionStorage.removeItem("logged_user");
+            sessionStorage.removeItem("logged_role");
+            sessionStorage.removeItem("logged_is_main");
+            CURRENT_ROLE = "viewer";
+            CURRENT_IS_MAIN = false;
             loadSavedUsers();
             checkAuth();
         };
