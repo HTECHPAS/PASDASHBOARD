@@ -63,27 +63,55 @@ window.CloudAuth = (() => {
         profile = null;
     }
     async function createUser(email, password, role) {
-        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
-        const { data: current } = await client.auth.getUser();
-        if (!current?.user) return { ok:false, error:"Admin session required." };
-        const adminProfile = await getProfile(current.user.id);
-        if (adminProfile?.role !== "admin") return { ok:false, error:"Full Access required." };
-        const { data: oldSession } = await client.auth.getSession();
-        const { data, error } = await client.auth.signUp({ email, password });
-        if (error) return { ok:false, error:error.message };
-        /* signUp may temporarily switch the browser session to the new user.
-           Restore the administrator session before changing the new profile. */
-        if (oldSession?.session) await client.auth.setSession(oldSession.session);
-        if (data?.user?.id) {
-            await new Promise(r => setTimeout(r, 300));
-            const { error: profileError } = await client.from("profiles")
-                .update({ username: email.split("@")[0], role: role === "admin" ? "admin" : "viewer" })
-                .eq("id", data.user.id);
-            if (profileError) return { ok:false, error:profileError.message };
-        }
-        profile = adminProfile;
-        return { ok:true, user:data.user };
+    if (!client) return { ok:false, error:"Cloud authentication is not configured." };
+
+    const { data: current } = await client.auth.getUser();
+    if (!current?.user) return { ok:false, error:"Admin session required." };
+
+    const adminProfile = await getProfile(current.user.id);
+    if (adminProfile?.role !== "admin") {
+        return { ok:false, error:"Full Access required." };
     }
+
+    const { data: oldSession } = await client.auth.getSession();
+
+    const { data, error } = await client.auth.signUp({
+        email,
+        password
+    });
+
+    if (error) return { ok:false, error:error.message };
+
+    if (oldSession?.session) {
+        await client.auth.setSession(oldSession.session);
+    }
+
+    if (data?.user?.id) {
+        await new Promise(r => setTimeout(r, 500));
+
+        const selectedRole =
+            role === "admin" ? "admin" : "viewer";
+
+        const { error: profileError } = await client.rpc(
+            "create_dashboard_account_profile",
+            {
+                target_user_id: data.user.id,
+                target_email: email,
+                new_role: selectedRole
+            }
+        );
+
+        if (profileError) {
+            return {
+                ok:false,
+                error:profileError.message
+            };
+        }
+    }
+
+    profile = adminProfile;
+    return { ok:true, user:data.user };
+}
     async function setRole(userId, role) {
         if (!client) return { ok:false, error:"Cloud authentication is not configured." };
         const { data: current } = await client.auth.getUser();
