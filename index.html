@@ -12,17 +12,17 @@
    ------------------------------------------------------------
    1) Create a free Supabase project.
    2) Run SUPABASE_SETUP.sql in Supabase SQL Editor.
-   3) Paste your Project URL and Publishable Key below.
-   4) Set enabled:true only after inserting your real Project URL and Publishable Key.
+   3) Paste your Supabase Publishable Key below.
+   4) The Project URL is already configured for PASDASHBOARD.
    5) Upload this HTML to GitHub Pages or another HTTPS host.
 
    SECURITY: Never place a Supabase Secret Key, service_role key, or
    database password in this file.
    ============================================================ */
 window.CLOUD_CONFIG = {
-    // Keep false until you replace the two placeholders below.
+    // Set true after you replace the publishable-key placeholder below.
     enabled: true,
-    projectUrl: "https://hdgwrkywswxxetgvcwje.supabase.co",
+    projectUrl: "https://hdgwrkywswxetgvcwje.supabase.co",
     publishableKey: "sb_publishable_sCfRtmewGMknvcTqPGkudg_jvl-7D4u",
     appId: "PASDASHBOARD"
 };
@@ -30,25 +30,7 @@ window.CLOUD_CONFIG = {
 window.CloudAuth = (() => {
     let client = null;
     let profile = null;
-
-    function init() {
-        if (!window.CLOUD_CONFIG.enabled || !window.supabase?.createClient) return false;
-        client = window.supabase.createClient(window.CLOUD_CONFIG.projectUrl, window.CLOUD_CONFIG.publishableKey);
-        return true;
-    }
-    async function getProfile(userId) {
-        if (!client || !userId) return null;
-        const { data } = await client.from("profiles").select("id,email,username,role,is_main").eq("id", userId).maybeSingle();
-        profile = data || null;
-        return profile;
-    }
-    async function restoreSession() {
-        if (!client) return null;
-        const { data } = await client.auth.getSession();
-        const user = data?.session?.user;
-        if (!user) return null;
-        return await getProfile(user.id);
-    }
+    const EDGE_FUNCTION_URL = "https://hdgwrkywswxetgvcwje.supabase.co/functions/v1/dashboard-user-admin";
     const INTERNAL_USER_DOMAIN = "pasdashboard.local";
 
     function normalizeUsername(value) {
@@ -56,92 +38,182 @@ window.CloudAuth = (() => {
     }
 
     function usernameToAuthEmail(username) {
-        const clean = normalizeUsername(username);
-        return `${clean}@${INTERNAL_USER_DOMAIN}`;
+        return `${normalizeUsername(username)}@${INTERNAL_USER_DOMAIN}`;
+    }
+
+    function init() {
+        if (!window.CLOUD_CONFIG.enabled || !window.supabase?.createClient) return false;
+        client = window.supabase.createClient(
+            window.CLOUD_CONFIG.projectUrl,
+            window.CLOUD_CONFIG.publishableKey,
+            { auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false } }
+        );
+        return true;
+    }
+
+    async function getProfile(userId) {
+        if (!client || !userId) return null;
+        const { data, error } = await client
+            .from("profiles")
+            .select("id,email,username,role,is_main")
+            .eq("id", userId)
+            .maybeSingle();
+        if (error) {
+            profile = null;
+            return null;
+        }
+        profile = data || null;
+        return profile;
+    }
+
+    async function restoreSession() {
+        if (!client) return null;
+        const { data } = await client.auth.getSession();
+        const user = data?.session?.user;
+        if (!user) {
+            profile = null;
+            return null;
+        }
+        return await getProfile(user.id);
+    }
+
+    async function callEdge(action, payload = {}) {
+        try {
+            let accessToken = "";
+            if (client) {
+                const { data } = await client.auth.getSession();
+                accessToken = data?.session?.access_token || "";
+            }
+
+            const headers = { "Content-Type": "application/json" };
+            if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+            const response = await fetch(EDGE_FUNCTION_URL, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ action, ...payload })
+            });
+
+            let result = null;
+            try { result = await response.json(); } catch (_) { result = null; }
+            if (!response.ok || !result?.ok) {
+                return { ok: false, error: result?.error || `Request failed (${response.status}).` };
+            }
+            return result;
+        } catch (error) {
+            return { ok: false, error: error?.message || "Unable to connect to the user service." };
+        }
     }
 
     async function signIn(identifier, password) {
         if (!client) return { ok:false, error:"Cloud authentication is not configured." };
-        const raw = identifier.trim();
-        // Main Account signs in with its real email address.
-        // Additional dashboard users sign in with username only; the dashboard
-        // maps that username to an internal Supabase Auth email automatically.
-        const email = raw.includes("@") ? raw : usernameToAuthEmail(raw);
-        const { data, error } = await client.auth.signInWithPassword({ email, password });
-        if (error) return { ok:false, error:"Invalid username/email or password." };
-        const p = await getProfile(data.user.id);
-        if (!p) { await client.auth.signOut(); return { ok:false, error:"User profile is not configured." }; }
-        // Main Account must use its real email. Non-main accounts may use username.
-        if (p.is_main && !raw.includes("@")) {
-            await client.auth.signOut();
-            return { ok:false, error:"The Main Account must sign in with its email address." };
+        const raw = String(identifier || "").trim();
+        if (!raw || !password) return { ok:false, error:"Enter your username/email and password." };
+
+        // Main Account uses its real email. Non-main users use username only.
+        if (raw.includes("@")) {
+            const { data, error } = await client.auth.signInWithPassword({ email: raw, password });
+            if (error) return { ok:false, error:"Invalid username/email or password." };
+            const p = await getProfile(data.user.id);
+            if (!p) {
+                await client.auth.signOut();
+                return { ok:false, error:"User profile is not configured." };
+            }
+            return { ok:true, user:data.user, profile:p };
         }
-        return { ok:true, user:data.user, profile:p };
+
+        const cleanUsername = normalizeUsername(raw);
+        const result = await callEdge("login", { username: cleanUsername, password });
+        if (!result.ok) return result;
+        if (!result.session?.access_token || !result.session?.refresh_token) {
+            return { ok:false, error:"Login service did not return a valid session." };
+        }
+
+        const { error: sessionError } = await client.auth.setSession({
+            access_token: result.session.access_token,
+            refresh_token: result.session.refresh_token
+        });
+        if (sessionError) return { ok:false, error:sessionError.message };
+
+        profile = result.profile || null;
+        return { ok:true, user:result.session.user, profile:profile };
     }
+
     async function signOut() {
-        if (client) await client.auth.signOut();
+        if (client) {
+            try { await client.auth.signOut(); } catch (_) {}
+        }
         profile = null;
     }
+
     async function createUser(username, password, role) {
         if (!client) return { ok:false, error:"Cloud authentication is not configured." };
-        const { data: current } = await client.auth.getUser();
-        if (!current?.user) return { ok:false, error:"Main Account session required." };
-        const adminProfile = await getProfile(current.user.id);
-        if (adminProfile?.role !== "admin" || adminProfile?.is_main !== true) return { ok:false, error:"Only the Main Account can create users." };
+        const current = await client.auth.getUser();
+        if (!current?.data?.user) return { ok:false, error:"Main Account session required." };
+
+        const adminProfile = await getProfile(current.data.user.id);
+        if (adminProfile?.role !== "admin" || adminProfile?.is_main !== true) {
+            return { ok:false, error:"Only the Main Account can create users." };
+        }
 
         const cleanUsername = normalizeUsername(username);
         if (!/^[a-z0-9][a-z0-9._-]{2,30}$/.test(cleanUsername)) {
             return { ok:false, error:"Username must be 3-31 characters using letters, numbers, dot, dash, or underscore." };
         }
-        if (cleanUsername === normalizeUsername(adminProfile.username) || cleanUsername.includes("@")) {
+        if (cleanUsername.includes("@")) {
+            return { ok:false, error:"Additional users use a username only. Do not enter an email address." };
+        }
+        if (cleanUsername === normalizeUsername(adminProfile.username)) {
             return { ok:false, error:"Choose a different username." };
         }
-
-        const { data: existing } = await client.from("profiles")
-            .select("id,is_main")
-            .eq("username", cleanUsername)
-            .maybeSingle();
-        if (existing) return { ok:false, error:"That username already exists." };
-
-        // Supabase Auth requires an email-shaped identity. For non-main users we
-        // generate a private internal address. The user never needs to know it.
-        const internalEmail = usernameToAuthEmail(cleanUsername);
-        const { data: oldSession } = await client.auth.getSession();
-        const { data, error } = await client.auth.signUp({
-            email: internalEmail,
-            password
-        });
-        if (error) return { ok:false, error:error.message };
-
-        // signUp can temporarily switch the browser session to the new user.
-        if (oldSession?.session) await client.auth.setSession(oldSession.session);
-        if (data?.user?.id) {
-            await new Promise(r => setTimeout(r, 300));
-            const { error: profileError } = await client.from("profiles")
-                .update({ username: cleanUsername, role: role === "admin" ? "admin" : "viewer", is_main: false })
-                .eq("id", data.user.id);
-            if (profileError) return { ok:false, error:profileError.message };
+        if (String(password || "").length < 6) {
+            return { ok:false, error:"Password must be at least 6 characters." };
         }
-        profile = adminProfile;
-        return { ok:true, user:data.user, username:cleanUsername };
+
+        const result = await callEdge("create", {
+            username: cleanUsername,
+            password,
+            role: role === "admin" ? "admin" : "viewer"
+        });
+        if (result.ok) profile = adminProfile;
+        return result.ok ? { ...result, username:cleanUsername } : result;
     }
+
     async function setRole(userId, role) {
         if (!client) return { ok:false, error:"Cloud authentication is not configured." };
-        const { data: current } = await client.auth.getUser();
-        const me = await getProfile(current?.user?.id);
-        if (me?.role !== "admin" || me?.is_main !== true) return { ok:false, error:"Only the Main Account can manage users." };
-        const { error } = await client.from("profiles").update({ role: role === "admin" ? "admin" : "viewer" }).eq("id", userId);
-        return error ? {ok:false,error:error.message} : {ok:true};
+        const current = await client.auth.getUser();
+        if (!current?.data?.user) return { ok:false, error:"Main Account session required." };
+        const me = await getProfile(current.data.user.id);
+        if (me?.role !== "admin" || me?.is_main !== true) {
+            return { ok:false, error:"Only the Main Account can manage users." };
+        }
+        return await callEdge("set_role", {
+            user_id: userId,
+            role: role === "admin" ? "admin" : "viewer"
+        });
     }
+
     async function listUsers() {
         if (!client) return [];
-        const { data: current } = await client.auth.getUser();
-        const me = await getProfile(current?.user?.id);
+        const current = await client.auth.getUser();
+        if (!current?.data?.user) return [];
+        const me = await getProfile(current.data.user.id);
         if (me?.role !== "admin" || me?.is_main !== true) return [];
-        const { data } = await client.from("profiles").select("id,email,username,role,is_main").order("email");
-        return data || [];
+        const result = await callEdge("list");
+        return result.ok ? (result.users || []) : [];
     }
-    return { init, restoreSession, signIn, signOut, createUser, setRole, listUsers, getProfile:()=>profile, getClient:()=>client };
+
+    return {
+        init,
+        restoreSession,
+        signIn,
+        signOut,
+        createUser,
+        setRole,
+        listUsers,
+        getProfile: () => profile,
+        getClient: () => client
+    };
 })();
 
 window.CloudSync = (() => {
@@ -1957,7 +2029,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         async function toggleCloudUserRole(userId) {
-            if (!isAdminUser()) return;
+            if (!isMainAccount()) return;
             const users = await window.CloudAuth.listUsers();
             const usr = users.find(u => u.id === userId);
             if (!usr) return;
