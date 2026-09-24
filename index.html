@@ -69,9 +69,9 @@ window.CloudAuth = (() => {
     if (!current?.user) return { ok:false, error:"Admin session required." };
 
     const adminProfile = await getProfile(current.user.id);
-    if (adminProfile?.role !== "admin") {
-        return { ok:false, error:"Full Access required." };
-    }
+    if (adminProfile?.role !== "admin" || adminProfile?.is_main !== true) {
+    return { ok:false, error:"Only the Main Account can create users." };
+}
 
     const { data: oldSession } = await client.auth.getSession();
 
@@ -116,7 +116,7 @@ window.CloudAuth = (() => {
         if (!client) return { ok:false, error:"Cloud authentication is not configured." };
         const { data: current } = await client.auth.getUser();
         const me = await getProfile(current?.user?.id);
-        if (me?.role !== "admin") return { ok:false, error:"Full Access required." };
+        if (me?.role !== "admin" || me?.is_main !== true) return {ok:false,error:"Only the Main Account can manage users."};
         const { error } = await client.from("profiles").update({ role: role === "admin" ? "admin" : "viewer" }).eq("id", userId);
         return error ? {ok:false,error:error.message} : {ok:true};
     }
@@ -124,7 +124,7 @@ window.CloudAuth = (() => {
         if (!client) return [];
         const { data: current } = await client.auth.getUser();
         const me = await getProfile(current?.user?.id);
-        if (me?.role !== "admin") return [];
+        if (me?.role !== "admin" || me?.is_main !== true) return [];
         const { data } = await client.from("profiles").select("id,email,username,role,is_main").order("email");
         return data || [];
     }
@@ -1674,10 +1674,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         let AUTH_PASS = "PASPASPAS";
         let additionalUsers = [];
         let CURRENT_ROLE = "admin";
+let CURRENT_IS_MAIN = false;
 
-        function isAdminUser() {
-            return CURRENT_ROLE === "admin";
-        }
+function isAdminUser() {
+    return CURRENT_ROLE === "admin";
+}
+
+function isMainAccount() {
+    return CURRENT_IS_MAIN === true;
+}
 
         function applyAccessUI() {
             const isAdmin = isAdminUser();
@@ -1685,7 +1690,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (appContent) appContent.classList.toggle("viewer-mode", !isAdmin);
 
             const settingsBtn = document.getElementById("main-acc-settings-btn");
-            if (settingsBtn) settingsBtn.classList.toggle("hidden", !isAdmin);
+            if (settingsBtn) settingsBtn.classList.toggle("hidden", !isMain);
 
             // Viewer = view-only across all modules. Admin = full access.
             document.querySelectorAll(".admin-only").forEach(el => {
@@ -1722,6 +1727,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             const isAuth = sessionStorage.getItem("authenticated") === "true";
             const loggedUser = sessionStorage.getItem("logged_user");
             const loggedRole = sessionStorage.getItem("logged_role") || (loggedUser === AUTH_USER ? "admin" : "viewer");
+            const loggedIsMain = sessionStorage.getItem("logged_is_main") === "true";
+            CURRENT_IS_MAIN = loggedIsMain;
 
             if (isAuth) {
                 CURRENT_ROLE = loggedRole;
@@ -1750,6 +1757,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     sessionStorage.setItem("logged_user", result.profile.email || u);
                     sessionStorage.setItem("logged_role", result.profile.role === "admin" ? "admin" : "viewer");
                     CURRENT_ROLE = result.profile.role === "admin" ? "admin" : "viewer";
+                    sessionStorage.setItem("logged_is_main", result.profile.is_main ? "true" : "false");
+                    CURRENT_IS_MAIN = result.profile.is_main === true;
                     err.classList.add("hidden");
                     checkAuth();
                     return;
@@ -1785,6 +1794,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             sessionStorage.removeItem("authenticated");
             sessionStorage.removeItem("logged_user");
             sessionStorage.removeItem("logged_role");
+            sessionStorage.removeItem("logged_is_main");
+            CURRENT_IS_MAIN = false;
             CURRENT_ROLE = "viewer";
             document.getElementById("login-username").value = "";
             document.getElementById("login-password").value = "";
@@ -1808,7 +1819,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         async function openUserManagementModal() {
-            if (!isAdminUser()) return;
+            if (!isMainAccount()) return;
 
             // The main account is kept separate from additional Full Access accounts.
             // Only the main account can see/change the main-account password section.
@@ -1853,7 +1864,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         async function handleAddUserSubmit(e) {
             e.preventDefault();
-            if (!isAdminUser()) return;
+            if (!isMainAccount()) return;
             const email = document.getElementById("new-user-name").value.trim();
             const upass = document.getElementById("new-user-pass").value;
             const roleEl = document.getElementById("new-user-role");
