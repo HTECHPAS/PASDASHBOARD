@@ -624,8 +624,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         .chart-box-container {
             position: relative;
             width: 100%;
-            height: 200px !important;
-            max-height: 200px !important;
+            height: 240px !important;
+            max-height: 240px !important;
             overflow: hidden;
             display: flex;
             align-items: center;
@@ -634,7 +634,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         .chart-box-container canvas {
             max-width: 100% !important;
-            max-height: 200px !important;
+            max-height: 240px !important;
         }
 
         @media print {
@@ -2795,76 +2795,73 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         function renderSummaryCharts(cDone, cOverdue, cOverdueDone, cPending, cStsok, cNa, pInProgress, pPlanning, pCompleted, sortedDtItems) {
-            // Chart 1: Calibration Breakdown
-            const ctxCalib = document.getElementById('chart-summary-calib').getContext('2d');
-            if (chartSummaryCalib) chartSummaryCalib.destroy();
-            chartSummaryCalib = new Chart(ctxCalib, {
-                type: 'doughnut',
-                data: {
-                    labels: ['DONE', 'OVERDUE, DONE', 'OVERDUE', 'PENDING', 'STSOK', 'NO SCHED'],
-                    datasets: [{
-                        data: [cDone, cOverdueDone, cOverdue, cPending, cStsok, cNa],
-                        backgroundColor: ['#22c55e', '#f97316', '#ef4444', '#eab308', '#3b82f6', '#64748b'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, color: '#94a3b8' } }, tooltip: { callbacks: { label: function(ctx) { const total = ctx.dataset.data.reduce((a,b)=>a+b,0); const n = ctx.raw || 0; const pct = total ? ((n/total)*100).toFixed(1) : '0.0'; return `${ctx.label}: ${n} (${pct}%)`; } } } }
-                }
-            });
+            const calibCanvas = document.getElementById('chart-summary-calib');
+            const projCanvas = document.getElementById('chart-summary-projects');
+            const paretoCanvas = document.getElementById('chart-summary-pareto');
+            if (!calibCanvas || !projCanvas || !paretoCanvas || typeof Chart === 'undefined') return;
 
-            // Chart 2: Project Status
-            const ctxProj = document.getElementById('chart-summary-projects').getContext('2d');
+            if (chartSummaryCalib) chartSummaryCalib.destroy();
             if (chartSummaryProjects) chartSummaryProjects.destroy();
-            chartSummaryProjects = new Chart(ctxProj, {
-                type: 'bar',
-                data: {
-                    labels: ['In Progress', 'Planning', 'Completed'],
-                    datasets: [{
-                        label: 'Projects',
-                        data: [pInProgress, pPlanning, pCompleted],
-                        backgroundColor: ['#3b82f6', '#eab308', '#22c55e'],
-                        borderRadius: 6
-                    }]
-                },
+            if (chartSummaryPareto) chartSummaryPareto.destroy();
+
+            // CALIBRATION: show only statuses that actually have records.
+            const calibRaw = [
+                ['DONE', cDone, '#22c55e'],
+                ['OVERDUE, DONE', cOverdueDone, '#f97316'],
+                ['OVERDUE', cOverdue, '#ef4444'],
+                ['PENDING', cPending, '#eab308'],
+                ['STSOK', cStsok, '#3b82f6'],
+                ['NO SCHED', cNa, '#64748b']
+            ];
+            const calibRows = calibRaw.filter(x => Number(x[1]) > 0);
+            const calibLabels = calibRows.length ? calibRows.map(x => x[0]) : ['No calibration data'];
+            const calibData = calibRows.length ? calibRows.map(x => Number(x[1])) : [1];
+            const calibColors = calibRows.length ? calibRows.map(x => x[2]) : ['#334155'];
+
+            chartSummaryCalib = new Chart(calibCanvas.getContext('2d'), {
+                type: 'doughnut',
+                data: { labels: calibLabels, datasets: [{ data: calibData, backgroundColor: calibColors, borderWidth: 2, borderColor: '#0f172a', hoverOffset: 5 }] },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51, 65, 85, 0.4)' } }
+                    responsive: true, maintainAspectRatio: false, cutout: '62%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 10, padding: 10, font: { size: 10 }, color: '#94a3b8' } },
+                        tooltip: { callbacks: { label: function(ctx) { const total = ctx.dataset.data.reduce((a,b)=>a+b,0); const n = Number(ctx.raw || 0); const pct = calibRows.length && total ? ((n/total)*100).toFixed(1) : '0.0'; return calibRows.length ? `${ctx.label}: ${n} (${pct}%)` : 'No calibration data'; } } }
                     }
                 }
             });
 
-            // Chart 3: Summary Pareto Downtime
-            const ctxPareto = document.getElementById('chart-summary-pareto').getContext('2d');
-            if (chartSummaryPareto) chartSummaryPareto.destroy();
-
-            const topLabels = sortedDtItems.slice(0, 4).map(i => i.name.substring(0, 15) + '...');
-            const topData = sortedDtItems.slice(0, 4).map(i => i.duration);
-
-            chartSummaryPareto = new Chart(ctxPareto, {
+            // PROJECTS: fixed integer axis and values ordered by workflow status.
+            const projectData = [Number(pCompleted)||0, Number(pInProgress)||0, Number(pPlanning)||0];
+            const maxProject = Math.max(1, ...projectData);
+            chartSummaryProjects = new Chart(projCanvas.getContext('2d'), {
                 type: 'bar',
                 data: {
-                    labels: topLabels.length ? topLabels : ['No Data'],
-                    datasets: [{
-                        label: 'Hours',
-                        data: topData.length ? topData : [0],
-                        backgroundColor: '#ef4444',
-                        borderRadius: 6
-                    }]
+                    labels: ['Completed', 'In Progress', 'Planning'],
+                    datasets: [{ label: 'Projects', data: projectData, backgroundColor: ['#22c55e','#3b82f6','#eab308'], borderRadius: 7, maxBarThickness: 42 }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.raw} project${Number(ctx.raw) === 1 ? '' : 's'}` } } },
                     scales: {
-                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.4)' } }
+                        x: { ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
+                        y: { beginAtZero: true, suggestedMax: maxProject + 1, ticks: { color: '#94a3b8', precision: 0, stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.4)' } }
+                    }
+                }
+            });
+
+            // DOWNTIME: horizontal bars keep long equipment/line names readable.
+            const pareto = (sortedDtItems || []).filter(x => Number(x.duration) > 0).slice(0, 5);
+            const paretoLabels = pareto.length ? pareto.map(x => x.name) : ['No downtime records'];
+            const paretoData = pareto.length ? pareto.map(x => Number(x.duration.toFixed(2))) : [0];
+            chartSummaryPareto = new Chart(paretoCanvas.getContext('2d'), {
+                type: 'bar',
+                data: { labels: paretoLabels, datasets: [{ label: 'Downtime (hrs)', data: paretoData, backgroundColor: '#ef4444', borderRadius: 6, maxBarThickness: 28 }] },
+                options: {
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${Number(ctx.raw).toFixed(1)} hrs` } } },
+                    scales: {
+                        x: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(51,65,85,0.4)' }, title: { display: true, text: 'Hours', color: '#94a3b8', font: { size: 10 } } },
+                        y: { ticks: { color: '#cbd5e1', font: { size: 9 } }, grid: { display: false } }
                     }
                 }
             });
@@ -3434,37 +3431,31 @@ document.addEventListener("DOMContentLoaded", async () => {
             const dtMap = {};
             primaryLogs.forEach(dt => {
                 const key = `${dt.code} - ${dt.equipment} (${dt.line})`;
-                const s = new Date(dt.start);
-                const e = new Date(dt.end);
-                const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
+                const s = new Date(dt.start), e = new Date(dt.end);
+                const dur = Math.max(0, (e - s) / 3600000);
                 if (!dtMap[key]) dtMap[key] = 0;
                 dtMap[key] += dur;
             });
-            const sortedPareto = Object.entries(dtMap).sort((a,b) => b[1] - a[1]).slice(0, 5);
-
-            const ctxDowntimePareto = document.getElementById('chart-downtime-pareto').getContext('2d');
-            if (chartDowntimePareto) chartDowntimePareto.destroy();
-            chartDowntimePareto = new Chart(ctxDowntimePareto, {
-                type: 'bar',
-                data: {
-                    labels: sortedPareto.length ? sortedPareto.map(i => i[0].substring(0, 18) + '...') : ['No Incidents'],
-                    datasets: [{
-                        label: 'Duration (hrs)',
-                        data: sortedPareto.length ? sortedPareto.map(i => i[1]) : [0],
-                        backgroundColor: '#ef4444',
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.4)' } }
+            const sortedPareto = Object.entries(dtMap).filter(x => x[1] > 0).sort((a,b) => b[1] - a[1]).slice(0, 8);
+            const dtCanvas = document.getElementById('chart-downtime-pareto');
+            if (dtCanvas && typeof Chart !== 'undefined') {
+                if (chartDowntimePareto) chartDowntimePareto.destroy();
+                chartDowntimePareto = new Chart(dtCanvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: sortedPareto.length ? sortedPareto.map(i => i[0]) : ['No Incidents'],
+                        datasets: [{ label: 'Duration (hrs)', data: sortedPareto.length ? sortedPareto.map(i => Number(i[1].toFixed(2))) : [0], backgroundColor: '#ef4444', borderRadius: 6, maxBarThickness: 30 }]
+                    },
+                    options: {
+                        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${Number(ctx.raw).toFixed(1)} hrs` } } },
+                        scales: {
+                            x: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(51,65,85,0.4)' }, title: { display: true, text: 'Hours', color: '#94a3b8', font: { size: 10 } } },
+                            y: { ticks: { color: '#cbd5e1', font: { size: 9 } }, grid: { display: false } }
+                        }
                     }
-                }
-            });
+                });
+            }
         }
 
         function handleDowntimeSubmit(e) {
@@ -3775,12 +3766,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const millMap = { "Plant 1": 0, "Plant 2": 0, "PreMix": 0 };
             filtered.forEach(pr => { if (millMap[pr.plant] !== undefined) millMap[pr.plant] += 1; });
-            const ctxMill = document.getElementById('chart-projects-mill').getContext('2d');
-            if (chartProjectsMill) chartProjectsMill.destroy();
-            chartProjectsMill = new Chart(ctxMill, {
-                type: 'bar', data: { labels: ['Plant 1', 'Plant 2', 'PreMix Plant'], datasets: [{ label: 'Active Projects', data: [millMap["Plant 1"], millMap["Plant 2"], millMap["PreMix"]], backgroundColor: ['#0284c7', '#0369a1', '#075985'], borderRadius: 8 }] },
-                options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{font:{size:10},color:'#94a3b8'},grid:{display:false}},y:{ticks:{font:{size:10},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,0.4)'}}} }
-            });
+            const millCanvas = document.getElementById('chart-projects-mill');
+            if (millCanvas && typeof Chart !== 'undefined') {
+                if (chartProjectsMill) chartProjectsMill.destroy();
+                const millData = [millMap["Plant 1"], millMap["Plant 2"], millMap["PreMix"]];
+                chartProjectsMill = new Chart(millCanvas.getContext('2d'), {
+                    type: 'bar',
+                    data: { labels: ['Plant 1', 'Plant 2', 'PreMix Plant'], datasets: [{ label: 'Projects', data: millData, backgroundColor: ['#0284c7', '#0369a1', '#075985'], borderRadius: 8, maxBarThickness: 48 }] },
+                    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${ctx.raw} project${Number(ctx.raw)===1?'':'s'}`}}}, scales:{x:{beginAtZero:true,ticks:{color:'#94a3b8',precision:0,stepSize:1},grid:{color:'rgba(51,65,85,0.4)'},title:{display:true,text:'Project count',color:'#94a3b8',font:{size:10}}},y:{ticks:{color:'#cbd5e1',font:{size:10}},grid:{display:false}}} }
+                });
+            }
         }
 
         function openProjectModal() {
