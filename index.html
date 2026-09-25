@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>PASDASHBOARD - Plant Operations, Calibration & Process Automation System</title>
+    <!-- CLOUD BUILD: SUPABASE-ONLY-REFRESH-2026-09-25 -->
     <!-- Tailwind CSS CDN -->
     
 <script>
@@ -512,8 +516,18 @@ window.CloudSync = (() => {
 
     async function start() {
         if (!init()) return { ok: false, configured: false };
-        installStorageWatcher();
-        return await pull();
+
+        // In cloud mode, browser localStorage is never a source of truth.
+        // Remove any data left by an older/test version before contacting Supabase.
+        // This prevents a failed/partial refresh from displaying stale test records.
+        if (configured()) {
+            Object.values(DATASETS).forEach(cfg => localStorage.removeItem(cfg.key));
+            Object.values(CATEGORIES).forEach(key => localStorage.removeItem(key));
+        }
+
+        const result = await pull();
+        if (result.ok) installStorageWatcher();
+        return result;
     }
 
     return {
@@ -550,9 +564,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         const cloudResult = await window.CloudSync.start();
 
         if (cloudResult.ok) {
-            /* CloudSync.pull() has already written the authoritative Supabase
-               data into the working arrays. Do NOT reload localStorage here,
-               because that would let each browser's old cache overwrite cloud data. */
+            /* Supabase is authoritative. CloudSync.pull() already populated the
+               working arrays; never reload browser/test cache after a cloud pull. */
+        } else {
+            console.warn("Cloud data was not loaded; stale browser data will not be used.", cloudResult.error || "Unknown cloud error");
         }
 
         if (typeof checkAuth === "function") {
@@ -2155,6 +2170,19 @@ document.addEventListener("DOMContentLoaded", async () => {
             { id: 203, plant: "PreMix", title: "Automated Micro-Ingredient Dosing Integration", lead: "Engr. Cruz", date: "2026-12-20", progress: 25, status: "Planning", notes: "P&ID diagrams signed off. Ordering load cells and batch controllers." }
         ];
 
+        // These arrays may contain development/demo records in older builds.
+        // When Supabase cloud mode is enabled, those records must NEVER be used
+        // as fallback data. The only source is the successful Supabase pull above.
+        if (window.CLOUD_CONFIG?.enabled) {
+            equipmentList = [];
+            downtimeLogs = [];
+            projectsList = [];
+            equipmentCategories = [];
+            uptimeEquipmentCategories = [];
+            lineCategories = [];
+            downtimeCategories = [];
+        }
+
         let gaugeExt = null;
         let gaugeInt = null;
         let chartPareto = null;
@@ -2172,7 +2200,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             sessionStorage.removeItem("logged_is_main");
             CURRENT_ROLE = "viewer";
             CURRENT_IS_MAIN = false;
-            loadSavedUsers();
+
+            // Additional users are cloud-managed. Do not restore the old
+            // local/test user list when the online Supabase version is active.
+            if (!window.CLOUD_CONFIG?.enabled) loadSavedUsers();
             checkAuth();
         };
 
