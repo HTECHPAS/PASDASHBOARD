@@ -511,8 +511,18 @@ window.CloudSync = (() => {
 
     async function start() {
         if (!init()) return { ok: false, configured: false };
-        installStorageWatcher();
-        return await pull();
+
+        // In cloud mode, browser localStorage must never be allowed to become
+        // the source of truth. Remove the old browser cache before pulling
+        // the authoritative dataset from Supabase.
+        Object.values(DATASETS).forEach(cfg => localStorage.removeItem(cfg.key));
+        Object.values(CATEGORIES).forEach(key => localStorage.removeItem(key));
+
+        // IMPORTANT: install the watcher only AFTER the cloud pull. Otherwise
+        // the pull itself can trigger a save of stale/partial browser data.
+        const result = await pull();
+        if (result.ok) installStorageWatcher();
+        return result;
     }
 
     return {
@@ -520,6 +530,7 @@ window.CloudSync = (() => {
         pull,
         push,
         isConfigured: configured,
+        isReady: () => ready,
         getLastError: () => lastError,
         keys: [
             ...Object.values(DATASETS).map(x => x.key),
@@ -539,34 +550,30 @@ window.addEventListener("cloudsync:status", (event) => {
 
 /* Start cloud loading before the app's normal initialization completes. */
 document.addEventListener("DOMContentLoaded", async () => {
-    if (window.CLOUD_CONFIG?.enabled) {
-        window.CloudAuth.init();
-        await hydrateCloudAuth();
+    // Expose one boot promise so every later authentication/init path waits
+    // for the same authoritative Supabase load. This prevents one browser
+    // from rendering its old localStorage snapshot while another renders
+    // the cloud data.
+    window.__CLOUD_READY_PROMISE__ = (async () => {
+        if (window.CLOUD_CONFIG?.enabled) {
+            window.CloudAuth.init();
+            await hydrateCloudAuth();
+        }
+
+        if (window.CloudSync?.isConfigured()) {
+            return await window.CloudSync.start();
+        }
+
+        return { ok: false, configured: false };
+    })();
+
+    const cloudResult = await window.__CLOUD_READY_PROMISE__;
+    if (!cloudResult.ok && cloudResult.error) {
+        console.warn("Cloud startup:", cloudResult.error);
     }
 
-    if (window.CloudSync?.isConfigured()) {
-        const cloudResult = await window.CloudSync.start();
-
-        if (cloudResult.ok) {
-            // Cloud data is the single source of truth. Do NOT reload the
-            // browser's old localStorage snapshot here, because that can
-            // overwrite/replace the freshly pulled cloud data differently
-            // on each browser/device.
-            if (typeof loadSavedUsers === "function") {
-                try { loadSavedUsers(); } catch (e) { console.warn("Cloud users reload:", e); }
-            }
-
-            // Re-render from the arrays populated by CloudSync.pull().
-            if (typeof renderAll === "function") {
-                try { renderAll(); } catch (e) { console.warn("Cloud render:", e); }
-            } else if (typeof checkAuth === "function") {
-                try { checkAuth(); } catch (e) { console.warn("Cloud auth refresh:", e); }
-            }
-        }
-
-        if (typeof checkAuth === "function") {
-            try { checkAuth(); } catch (e) { console.warn("Cloud auth refresh:", e); }
-        }
+    if (typeof checkAuth === "function") {
+        try { await checkAuth(); } catch (e) { console.warn("Cloud auth refresh:", e); }
     }
 });
 </script>
@@ -1005,6 +1012,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 </div>
                             </div>
 
+                            <div class="flex items-center gap-2 border-b border-slate-700/40 pb-2">
+                                <i class="fa-solid fa-building text-blue-400"></i>
+                                <h5 class="text-xs font-black text-white uppercase tracking-wider">Executive Summary Per Plant</h5>
+                                <span class="text-[10px] text-slate-500">Plant 1 · Plant 2 · PreMix Plant</span>
+                            </div>
                             <div id="summary-per-plant-reports" class="space-y-3"></div>
 
                             <div class="space-y-2">
@@ -1818,7 +1830,23 @@ document.addEventListener("DOMContentLoaded", async () => {
             return await window.CloudAuth.restoreSession();
         }
 
-        function checkAuth() {
+        async function checkAuth() {
+            // Cloud data must be loaded before initApp() reads any dashboard
+            // arrays. This is the key protection against browser-to-browser
+            // differences caused by stale localStorage.
+            if (window.CloudSync?.isConfigured()) {
+                try {
+                    if (window.__CLOUD_READY_PROMISE__) {
+                        await window.__CLOUD_READY_PROMISE__;
+                    }
+                    if (!window.CloudSync.isReady()) {
+                        await window.CloudSync.pull();
+                    }
+                } catch (e) {
+                    console.warn("Cloud data refresh before auth:", e);
+                }
+            }
+
             const isAuth = sessionStorage.getItem("authenticated") === "true";
             const loggedUser = sessionStorage.getItem("logged_user");
             const loggedRole = sessionStorage.getItem("logged_role") || (loggedUser === AUTH_USER ? "admin" : "viewer");
@@ -2728,6 +2756,184 @@ document.addEventListener("DOMContentLoaded", async () => {
             const mttr = filteredDt.length > 0 ? Math.round((totalDtHours / filteredDt.length) * 60) : 0;
             document.getElementById("summary-dt-mtbf").innerText = `${mtbf} hrs`;
             document.getElementById("summary-dt-mttr").innerText = `${mttr} mins`;
+
+            // ============================================================
+            // EXECUTIVE SUMMARY — PER PLANT BREAKDOWN
+            // When "All Plants Overview" is selected, show a complete
+            // summary for each plant instead of only one combined total.
+            // The same year/month filter is applied to every plant.
+            // ============================================================
+            const perPlantContainer = document.getElementById("summary-per-plant-reports");
+            if (perPlantContainer) {
+                const plants = [
+                    { key: "Plant 1", label: "Plant 1" },
+                    { key: "Plant 2", label: "Plant 2" },
+                    { key: "PreMix", label: "PreMix Plant" }
+                ];
+
+                const makePlantSummary = (plant) => {
+                    const eq = equipmentList.filter(item => {
+                        if (item.plant !== plant.key) return false;
+                        return checkDateMatchFilter(
+                            item.extCalib || item.extSched || item.intCalib || item.intSched,
+                            fType, yearVal, monthVal
+                        );
+                    });
+
+                    const dt = downtimeLogs.filter(item => {
+                        if (item.plant !== plant.key) return false;
+                        return checkDateMatchFilter(item.start, fType, yearVal, monthVal);
+                    });
+
+                    const pr = projectsList.filter(item => {
+                        if (item.plant !== plant.key) return false;
+                        return checkDateMatchFilter(item.date, fType, yearVal, monthVal);
+                    });
+
+                    let done = 0, overdue = 0, overdueDone = 0, pending = 0, stsok = 0, na = 0;
+                    eq.forEach(item => {
+                        const st = getCalibStatus(item);
+                        if (st === "DONE") done++;
+                        else if (st === "OVERDUE, DONE") overdueDone++;
+                        else if (st === "OVERDUE") overdue++;
+                        else if (st === "PENDING") pending++;
+                        else if (st === "STSOK") stsok++;
+                        else na++;
+                    });
+
+                    const scheduled = Math.max(0, eq.length - na);
+                    const compliance = scheduled > 0 ? Math.round((done / scheduled) * 100) : 0;
+
+                    let dtHours = 0;
+                    dt.forEach(item => {
+                        const start = new Date(item.start);
+                        const end = new Date(item.end);
+                        const hours = (end - start) / (1000 * 60 * 60);
+                        if (hours > 0) dtHours += hours;
+                    });
+
+                    const availableHours = (dt.length > 0 ? dt.length : 1) * 720;
+                    const uptime = Math.max(
+                        0,
+                        Math.min(100, parseFloat(((1 - (dtHours / availableHours)) * 100).toFixed(1)))
+                    );
+
+                    let inProgress = 0, planning = 0, completed = 0;
+                    pr.forEach(item => {
+                        if (item.status === "In Progress") inProgress++;
+                        else if (item.status === "Planning") planning++;
+                        else if (item.status === "Completed") completed++;
+                    });
+
+                    const mtbf = dt.length > 0 ? (720 / dt.length).toFixed(1) : "0";
+                    const mttr = dt.length > 0 ? Math.round((dtHours / dt.length) * 60) : 0;
+
+                    return {
+                        label: plant.label,
+                        eqCount: eq.length,
+                        done,
+                        overdue,
+                        overdueDone,
+                        pending,
+                        stsok,
+                        compliance,
+                        projects: pr.length,
+                        inProgress,
+                        planning,
+                        completed,
+                        downtime: dtHours,
+                        uptime,
+                        mtbf,
+                        mttr
+                    };
+                };
+
+                const plantSummaries = plants.map(makePlantSummary);
+
+                // Per-plant cards are shown whenever All Plants is selected.
+                // If a single plant is selected, show only that plant.
+                const visiblePlantSummaries = currentPlant === "ALL"
+                    ? plantSummaries
+                    : plantSummaries.filter(p => p.label === currentPlant);
+
+                perPlantContainer.innerHTML = visiblePlantSummaries.map(p => `
+                    <div class="bg-slate-900/70 border border-slate-700/60 rounded-2xl p-4 space-y-4">
+                        <div class="flex items-center justify-between gap-3 flex-wrap border-b border-slate-700/50 pb-3">
+                            <div>
+                                <h5 class="text-sm font-black text-white flex items-center gap-2">
+                                    <i class="fa-solid fa-industry text-blue-400"></i>
+                                    ${escapeHtml(p.label)}
+                                </h5>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Plant-level executive summary for the selected period</p>
+                            </div>
+                            <span class="text-[10px] font-bold bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2.5 py-1 rounded-lg">
+                                ${p.eqCount} calibration records · ${p.projects} projects
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
+                            <div class="bg-slate-800/80 rounded-xl p-3">
+                                <div class="text-[9px] text-slate-500 uppercase font-bold">Calibration Done</div>
+                                <div class="text-lg font-black text-emerald-400">${p.done}</div>
+                            </div>
+                            <div class="bg-slate-800/80 rounded-xl p-3">
+                                <div class="text-[9px] text-slate-500 uppercase font-bold">Done</div>
+                                <div class="text-lg font-black text-emerald-400">${p.done}</div>
+                            </div>
+                            <div class="bg-slate-800/80 rounded-xl p-3">
+                                <div class="text-[9px] text-slate-500 uppercase font-bold">Overdue</div>
+                                <div class="text-lg font-black text-red-400">${p.overdue}</div>
+                            </div>
+                            <div class="bg-slate-800/80 rounded-xl p-3">
+                                <div class="text-[9px] text-slate-500 uppercase font-bold">Late Done</div>
+                                <div class="text-lg font-black text-orange-400">${p.overdueDone}</div>
+                            </div>
+                            <div class="bg-slate-800/80 rounded-xl p-3">
+                                <div class="text-[9px] text-slate-500 uppercase font-bold">Pending</div>
+                                <div class="text-lg font-black text-amber-400">${p.pending}</div>
+                            </div>
+                            <div class="bg-slate-800/80 rounded-xl p-3">
+                                <div class="text-[9px] text-slate-500 uppercase font-bold">Uptime</div>
+                                <div class="text-lg font-black text-cyan-400">${p.uptime}%</div>
+                            </div>
+                            <div class="bg-slate-800/80 rounded-xl p-3">
+                                <div class="text-[9px] text-slate-500 uppercase font-bold">Downtime</div>
+                                <div class="text-lg font-black text-red-400">${p.downtime.toFixed(1)}h</div>
+                            </div>
+                            <div class="bg-slate-800/80 rounded-xl p-3">
+                                <div class="text-[9px] text-slate-500 uppercase font-bold">Projects</div>
+                                <div class="text-lg font-black text-indigo-400">${p.projects}</div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/40">
+                                <div class="text-[10px] text-slate-400 font-bold uppercase mb-2">Calibration Completion (Done)</div>
+                                <div class="grid grid-cols-4 gap-2 text-center text-[10px]">
+                                    <div><div class="text-emerald-400 font-black text-base">${p.done}</div>Done</div>
+                                    <div><div class="text-red-400 font-black text-base">${p.overdue}</div>Overdue</div>
+                                    <div><div class="text-orange-400 font-black text-base">${p.overdueDone}</div>Late Done</div>
+                                    <div><div class="text-amber-400 font-black text-base">${p.pending}</div>Pending</div>
+                                </div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/40">
+                                <div class="text-[10px] text-slate-400 font-bold uppercase mb-2">Project Status</div>
+                                <div class="grid grid-cols-3 gap-2 text-center text-[10px]">
+                                    <div><div class="text-blue-400 font-black text-base">${p.inProgress}</div>In Progress</div>
+                                    <div><div class="text-amber-400 font-black text-base">${p.planning}</div>Planning</div>
+                                    <div><div class="text-emerald-400 font-black text-base">${p.completed}</div>Completed</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-4 text-[10px] text-slate-400 border-t border-slate-700/40 pt-3">
+                            <span><i class="fa-solid fa-chart-line text-blue-400 mr-1"></i> MTBF: <strong class="text-slate-200">${p.mtbf} hrs</strong></span>
+                            <span><i class="fa-solid fa-wrench text-amber-400 mr-1"></i> MTTR: <strong class="text-slate-200">${p.mttr} mins</strong></span>
+                            <span><i class="fa-solid fa-calendar-check text-cyan-400 mr-1"></i> STSOK: <strong class="text-slate-200">${p.stsok}</strong></span>
+                        </div>
+                    </div>
+                `).join("");
+            }
 
             // Top Equipment / Lines by Downtime Table
             const dtMap = {};
