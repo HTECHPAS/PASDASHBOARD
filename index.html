@@ -171,9 +171,9 @@ window.CloudAuth = (() => {
         }
 
         const normalizedRole = role === "admin" ? "admin" : "viewer";
-        const pages = normalizedRole === "admin"
-            ? ["summary", "calibration", "uptime", "calendar", "projects"]
-            : (Array.isArray(accessPages) && accessPages.length ? accessPages : ["summary", "projects"]);
+        const allPages = ["summary", "calibration", "uptime", "calendar", "projects"];
+        const selectedPages = Array.isArray(accessPages) ? accessPages.filter(p => allPages.includes(p)) : [];
+        const pages = selectedPages.length ? [...new Set(selectedPages)] : ["summary", "projects"];
         const result = await callEdge("create", {
             username: cleanUsername,
             password,
@@ -205,9 +205,9 @@ window.CloudAuth = (() => {
         const me = await getProfile(current.data.user.id);
         if (me?.role !== "admin" || me?.is_main !== true) return { ok:false, error:"Only the Main Account can manage users." };
         const normalizedRole = role === "admin" ? "admin" : "viewer";
-        const pages = normalizedRole === "admin"
-            ? ["summary", "calibration", "uptime", "calendar", "projects"]
-            : (Array.isArray(accessPages) && accessPages.length ? accessPages : ["summary", "projects"]);
+        const allPages = ["summary", "calibration", "uptime", "calendar", "projects"];
+        const selectedPages = Array.isArray(accessPages) ? accessPages.filter(p => allPages.includes(p)) : [];
+        const pages = selectedPages.length ? [...new Set(selectedPages)] : ["summary", "projects"];
         return await callEdge("update_user", {
             user_id: userId, username, password: password || undefined, role: normalizedRole, access_pages: pages
         });
@@ -1211,16 +1211,6 @@ window.addEventListener("cloudsync:status", (event) => {
                         <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">NO SCHED</span>
                         <p id="calib-kpi-na" class="text-2xl font-black text-slate-400 mt-1">0</p>
                     </div>
-                    <div class="bg-slate-800/90 border border-blue-500/20 p-4 rounded-2xl">
-                        <span class="text-[10px] text-blue-300 uppercase font-bold tracking-wider">EXT COMPLETED</span>
-                        <p id="calib-kpi-ext-completed" class="text-2xl font-black text-blue-300 mt-1">0</p>
-                        <span class="text-[9px] text-slate-500">DONE + OVERDUE, DONE</span>
-                    </div>
-                    <div class="bg-slate-800/90 border border-purple-500/20 p-4 rounded-2xl">
-                        <span class="text-[10px] text-purple-300 uppercase font-bold tracking-wider">INT COMPLETED</span>
-                        <p id="calib-kpi-int-completed" class="text-2xl font-black text-purple-300 mt-1">0</p>
-                        <span class="text-[9px] text-slate-500">DONE + OVERDUE, DONE</span>
-                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1731,13 +1721,24 @@ window.addEventListener("cloudsync:status", (event) => {
                         </div>
                         <div>
                             <label class="block text-slate-300 font-semibold mb-1">Access *</label>
-                            <select id="new-user-role" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
+                            <select id="new-user-role" onchange="toggleNewUserAuthority()" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
                                 <option value="admin">Full Access</option>
                                 <option value="viewer">View Only</option>
                             </select>
                         </div>
                     </div>
-                    <p class="text-[10px] text-slate-500">Full Access users can edit dashboard records but cannot manage users. View Only users can view records without changing them. Only the Main Account can create or manage accounts.</p>
+                    <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-2">
+                        <div class="text-[11px] font-bold uppercase tracking-wider text-slate-300">View Authority</div>
+                        <p class="text-[10px] text-slate-500">The Main Account selects which pages this user can open. Role controls whether the user can edit records.</p>
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="summary" checked> Executive Summary</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="calibration"> Calibration Tracker</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="uptime"> Uptime / Downtime</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="calendar"> Calib Calendar</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="projects" checked> Automation Projects</label>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-slate-500">Only the Main Account can create or manage accounts. View Only users cannot edit or delete dashboard records.</p>
                     <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-xl transition shadow-md">
                         Add User Account
                     </button>
@@ -1782,7 +1783,7 @@ window.addEventListener("cloudsync:status", (event) => {
             </div>
             <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-2">
                 <div class="text-[11px] font-bold uppercase tracking-wider text-slate-300">View Authority</div>
-                <p class="text-[10px] text-slate-500">For View Only users, select the pages this account can open. Full Access users automatically receive all pages.</p>
+                <p class="text-[10px] text-slate-500">The Main Account selects which pages this account can open. Role controls whether the user can edit records.</p>
                 <div class="grid grid-cols-2 gap-2 text-xs">
                     <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="summary"> Executive Summary</label>
                     <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="calibration"> Calibration Tracker</label>
@@ -2013,7 +2014,7 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function isPageAllowed(page) {
-            if (isMainAccount() || isAdminUser()) return true;
+            if (isMainAccount()) return true;
             return CURRENT_ACCESS_PAGES.includes(page);
         }
 
@@ -2119,7 +2120,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     sessionStorage.setItem("logged_user", result.profile.email || u);
                     sessionStorage.setItem("logged_role", result.profile.role === "admin" ? "admin" : "viewer");
                     sessionStorage.setItem("logged_is_main", result.profile.is_main ? "true" : "false");
-                    const accessPages = result.profile.role === "admin" || result.profile.is_main
+                    const accessPages = result.profile.is_main
                         ? ["summary", "calibration", "uptime", "calendar", "projects"]
                         : (Array.isArray(result.profile.access_pages) && result.profile.access_pages.length ? result.profile.access_pages : ["summary", "projects"]);
                     sessionStorage.setItem("logged_access_pages", JSON.stringify(accessPages));
@@ -2210,11 +2211,19 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("new-user-pass").value = "";
             const roleEl = document.getElementById("new-user-role");
             if (roleEl) roleEl.value = "viewer";
+            document.querySelectorAll(".new-page-access").forEach(cb => cb.checked = cb.value === "summary" || cb.value === "projects");
             document.getElementById("modal-user-management").classList.remove("hidden");
         }
 
         function closeUserManagementModal() {
             document.getElementById("modal-user-management").classList.add("hidden");
+        }
+
+        function toggleNewUserAuthority() {
+            const role = document.getElementById("new-user-role")?.value || "viewer";
+            if (role === "admin") {
+                document.querySelectorAll(".new-page-access").forEach(cb => cb.checked = true);
+            }
         }
 
         function updateMainPassword() {
@@ -2246,12 +2255,14 @@ window.addEventListener("cloudsync:status", (event) => {
 
             if (await cloudAuthEnabled()) {
                 if (username.includes("@")) { alert("Additional users use a username only. Do not enter an email address."); return; }
-                const defaultPages = role === "admin" ? ["summary", "calibration", "uptime", "calendar", "projects"] : ["summary", "projects"];
-                const result = await window.CloudAuth.createUser(username, upass, role, defaultPages);
+                const pages = Array.from(document.querySelectorAll(".new-page-access:checked")).map(cb => cb.value);
+                if (pages.length === 0) { alert("Select at least one View Authority page."); return; }
+                const result = await window.CloudAuth.createUser(username, upass, role, pages);
                 if (!result.ok) { alert(result.error || "Unable to create user."); return; }
                 document.getElementById("new-user-name").value = "";
                 document.getElementById("new-user-pass").value = "";
                 if (roleEl) roleEl.value = "viewer";
+                document.querySelectorAll(".new-page-access").forEach(cb => cb.checked = cb.value === "summary" || cb.value === "projects");
                 await renderSubUsersList();
                 alert("Cloud user created successfully.");
                 return;
@@ -2289,7 +2300,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     const isFull = usr.role === "admin";
                     const pages = Array.isArray(usr.access_pages) && usr.access_pages.length ? usr.access_pages : ["summary", "projects"];
                     const pageLabels = {summary:"Executive Summary", calibration:"Calibration", uptime:"Uptime / Downtime", calendar:"Calib Calendar", projects:"Automation Projects"};
-                    const authority = isFull ? "All pages" : pages.map(p => pageLabels[p] || p).join(", ");
+                    const authority = pages.length === 5 ? "All pages" : pages.map(p => pageLabels[p] || p).join(", ");
                     const item = document.createElement("div");
                     item.className = "flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2 rounded-xl text-xs gap-2";
                     item.innerHTML = `
@@ -2331,15 +2342,15 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("edit-cloud-user-name").value = usr.username || "";
             document.getElementById("edit-cloud-user-pass").value = "";
             document.getElementById("edit-cloud-user-role").value = usr.role === "admin" ? "admin" : "viewer";
-            document.querySelectorAll(".edit-page-access").forEach(cb => cb.checked = Array.isArray(usr.access_pages) && usr.access_pages.includes(cb.value));
+            const savedPages = Array.isArray(usr.access_pages) && usr.access_pages.length ? usr.access_pages : ["summary", "projects"];
+            document.querySelectorAll(".edit-page-access").forEach(cb => cb.checked = savedPages.includes(cb.value));
             toggleEditUserAuthority();
             document.getElementById("edit-cloud-user-msg").classList.add("hidden");
             document.getElementById("modal-edit-cloud-user").classList.remove("hidden");
         }
 
         function toggleEditUserAuthority() {
-            const full = document.getElementById("edit-cloud-user-role")?.value === "admin";
-            document.querySelectorAll(".edit-page-access").forEach(cb => { cb.disabled = full; if (full) cb.checked = true; });
+            document.querySelectorAll(".edit-page-access").forEach(cb => { cb.disabled = false; });
         }
 
         function closeEditCloudUser() {
@@ -2855,6 +2866,16 @@ window.addEventListener("cloudsync:status", (event) => {
             }
         }
 
+        function openProjectsFromSummary() {
+            if (!isPageAllowed("projects")) return;
+            const summaryFilterType = document.getElementById("summary-filter-type")?.value || "all";
+            const summaryYear = document.getElementById("summary-year-filter")?.value || "ALL";
+            const projectYear = document.getElementById("projects-year-filter");
+            if (projectYear) projectYear.value = summaryFilterType === "year" && summaryYear ? summaryYear : "ALL";
+            switchModule("projects");
+            document.getElementById("module-projects")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+
         function switchModule(mod) {
             if (!isPageAllowed(mod)) {
                 const fallback = isPageAllowed("summary") ? "summary" : ["summary","calibration","uptime","calendar","projects"].find(isPageAllowed);
@@ -3150,10 +3171,14 @@ window.addEventListener("cloudsync:status", (event) => {
             });
 
             const projSupp = document.getElementById("summary-per-plant-projects");
+            const projectViewAction = isPageAllowed("projects")
+                ? `<button type="button" onclick="openProjectsFromSummary()" class="mt-2 w-full px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/15 text-[10px] font-semibold transition"><i class="fa-solid fa-folder-open mr-1"></i> View Projects</button>`
+                : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
             projSupp.innerHTML = `
                 <div class="flex justify-between text-xs py-1 border-b border-slate-700/40"><span>In Progress:</span><strong class="text-blue-400">${pInProgress}</strong></div>
                 <div class="flex justify-between text-xs py-1 border-b border-slate-700/40"><span>Planning:</span><strong class="text-amber-400">${pPlanning}</strong></div>
                 <div class="flex justify-between text-xs py-1"><span>Completed:</span><strong class="text-emerald-400">${pCompleted}</strong></div>
+                ${projectViewAction}
             `;
 
             // Render summary charts
@@ -3373,10 +3398,6 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("calib-kpi-overdue").innerText = tOverdue;
             const overdueDoneEl = document.getElementById("calib-kpi-overdue-done");
             if (overdueDoneEl) overdueDoneEl.innerText = tOverdueDone;
-            const extCompletedEl = document.getElementById("calib-kpi-ext-completed");
-            const intCompletedEl = document.getElementById("calib-kpi-int-completed");
-            if (extCompletedEl) extCompletedEl.innerText = ext.DONE + ext["OVERDUE, DONE"];
-            if (intCompletedEl) intCompletedEl.innerText = int.DONE + int["OVERDUE, DONE"];
             const statusCard = (label, value, cls) => `<div class="bg-slate-800/70 border border-slate-700/50 rounded-lg p-2"><div class="text-[9px] text-slate-500">${label}</div><div class="text-sm font-black ${cls}">${value}</div></div>`;
             const statusOrder = [['DONE','text-emerald-400'],['OVERDUE, DONE','text-orange-400'],['OVERDUE','text-red-400'],['PENDING','text-amber-400'],['STSOK','text-blue-400'],['NA','text-slate-400']];
             document.getElementById('calib-external-breakdown').innerHTML = statusOrder.map(([k,c]) => statusCard(k, ext[k] || 0, c)).join('');
@@ -4192,11 +4213,13 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div id="project-timeline-${pr.id}" class="hidden">${renderProjectTimeline(pr)}</div>
                         <div class="flex items-center justify-between pt-2 border-t border-slate-700/50 text-xs">
                             <span class="text-slate-400"><i class="fa-solid fa-calendar text-amber-400 mr-1"></i>Target: ${escapeHtml(pr.date)}</span>
-                            <div class="flex items-center gap-2"><button onclick="editProject(${pr.id})" class="text-blue-400 hover:text-blue-300 font-semibold"><i class="fa-solid fa-pen"></i></button><button onclick="deleteProject(${pr.id})" class="text-red-400 hover:text-red-300 font-semibold"><i class="fa-solid fa-trash"></i></button></div>
+                            <div class="flex items-center gap-2 admin-only"><button onclick="editProject(${pr.id})" class="text-blue-400 hover:text-blue-300 font-semibold"><i class="fa-solid fa-pen"></i></button><button onclick="deleteProject(${pr.id})" class="text-red-400 hover:text-red-300 font-semibold"><i class="fa-solid fa-trash"></i></button></div>
                         </div>`;
                     container.appendChild(card);
                 });
             }
+
+            container.querySelectorAll(".admin-only").forEach(el => el.classList.toggle("hidden", !isAdminUser()));
 
             const millMap = { "Plant 1": 0, "Plant 2": 0, "PreMix": 0 };
             filtered.forEach(pr => { if (millMap[pr.plant] !== undefined) millMap[pr.plant] += 1; });
