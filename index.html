@@ -2877,16 +2877,20 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function switchModule(mod) {
+            // Enforce View Authority before changing modules.
             if (!isPageAllowed(mod)) {
                 const fallback = isPageAllowed("summary") ? "summary" : ["summary","calibration","uptime","calendar","projects"].find(isPageAllowed);
                 if (fallback && fallback !== mod) return switchModule(fallback);
                 return;
             }
+
             activeModule = mod;
             const modules = ['summary', 'calibration', 'uptime', 'calendar', 'projects'];
             modules.forEach(m => {
                 const section = document.getElementById(`module-${m}`);
                 const btn = document.getElementById(`nav-btn-${m}`);
+                if (!section || !btn) return;
+
                 if (m === mod) {
                     section.classList.remove("hidden");
                     btn.className = "px-3.5 py-1.5 rounded-lg font-semibold transition-all bg-blue-600 text-white shadow-sm whitespace-nowrap";
@@ -2894,6 +2898,11 @@ window.addEventListener("cloudsync:status", (event) => {
                     section.classList.add("hidden");
                     btn.className = "px-3.5 py-1.5 rounded-lg font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap";
                 }
+
+                // switchModule used to replace className and accidentally remove
+                // the Tailwind `hidden` class applied by View Authority. Re-apply
+                // the authority after styling so unauthorized tabs stay hidden.
+                btn.classList.toggle("hidden", !isPageAllowed(m));
             });
 
             if (mod === 'summary') renderSummaryModule();
@@ -2901,6 +2910,10 @@ window.addEventListener("cloudsync:status", (event) => {
             if (mod === 'uptime') renderDowntimeModule();
             if (mod === 'calendar') renderCalendarModule();
             if (mod === 'projects') renderProjectsModule();
+
+            // Final authority pass protects against any render function changing
+            // navigation classes.
+            applyPageAuthorityUI();
         }
 
         function onPlantChange() {
