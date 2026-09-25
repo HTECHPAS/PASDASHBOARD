@@ -1009,48 +1009,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-3">
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
-                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Instrument Count Total</span>
-                        <span id="calib-kpi-total-note" class="block text-[9px] text-slate-500 mt-0.5">Each equipment code = 1 instrument</span>
-                        <p id="calib-kpi-total" class="text-2xl font-black text-white mt-1">0</p>
-                    </div>
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
-                        <span class="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">DONE</span>
-                        <p id="calib-kpi-done" class="text-2xl font-black text-emerald-400 mt-1">0</p>
-                    </div>
-                    <div class="bg-slate-800/90 border border-orange-500/20 p-4 rounded-2xl">
-                        <span class="text-[10px] text-orange-400 uppercase font-bold tracking-wider">OVERDUE, DONE</span>
-                        <p id="calib-kpi-overdue-done" class="text-2xl font-black text-orange-400 mt-1">0</p>
-                    </div>
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
-                        <span class="text-[10px] text-red-400 uppercase font-bold tracking-wider">OVERDUE</span>
-                        <p id="calib-kpi-overdue" class="text-2xl font-black text-red-400 mt-1">0</p>
-                    </div>
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
-                        <span class="text-[10px] text-amber-400 uppercase font-bold tracking-wider">PENDING (&lt;3mo)</span>
-                        <p id="calib-kpi-pending" class="text-2xl font-black text-amber-400 mt-1">0</p>
-                    </div>
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
-                        <span class="text-[10px] text-blue-400 uppercase font-bold tracking-wider">STSOK (&gt;3mo)</span>
-                        <p id="calib-kpi-stsok" class="text-2xl font-black text-blue-400 mt-1">0</p>
-                    </div>
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
-                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">NO SCHED</span>
-                        <p id="calib-kpi-na" class="text-2xl font-black text-slate-400 mt-1">0</p>
-                    </div>
-                    <div class="bg-slate-800/90 border border-blue-500/20 p-4 rounded-2xl">
-                        <span class="text-[10px] text-blue-300 uppercase font-bold tracking-wider">EXT COMPLETED</span>
-                        <p id="calib-kpi-ext-completed" class="text-2xl font-black text-blue-300 mt-1">0</p>
-                        <span class="text-[9px] text-slate-500">DONE + OVERDUE, DONE</span>
-                    </div>
-                    <div class="bg-slate-800/90 border border-purple-500/20 p-4 rounded-2xl">
-                        <span class="text-[10px] text-purple-300 uppercase font-bold tracking-wider">INT COMPLETED</span>
-                        <p id="calib-kpi-int-completed" class="text-2xl font-black text-purple-300 mt-1">0</p>
-                        <span class="text-[9px] text-slate-500">DONE + OVERDUE, DONE</span>
-                    </div>
-                </div>
-
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl flex flex-col sm:flex-row items-center gap-6 overflow-hidden">
                         <div class="relative w-36 h-36 flex-shrink-0 chart-box-container" style="height: 140px !important; max-height: 140px !important;">
@@ -2843,7 +2801,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             chartSummaryCalib = new Chart(ctxCalib, {
                 type: 'doughnut',
                 data: {
-                    labels: ['DONE', 'OVERDUE, DONE', 'OVERDUE', 'PENDING', 'STSOK'],
+                    labels: ['DONE', 'OVERDUE, DONE', 'OVERDUE', 'PENDING', 'STSOK', 'NO SCHED'],
                     datasets: [{
                         data: [cDone, cOverdueDone, cOverdue, cPending, cStsok, cNa],
                         backgroundColor: ['#22c55e', '#f97316', '#ef4444', '#eab308', '#3b82f6', '#64748b'],
@@ -2920,44 +2878,35 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         function renderCalibGauges() {
             const filtered = equipmentList.filter(eq => currentPlant === "ALL" || eq.plant === currentPlant);
-
-            let extActive = 0, extDone = 0;
-            let intActive = 0, intDone = 0;
+            let extActive = 0, extDone = 0, intActive = 0, intDone = 0;
 
             filtered.forEach(eq => {
+                const extStatus = getSubCalibStatus(eq.extSched, eq.extCalib);
+                const intStatus = getSubCalibStatus(eq.intSched, eq.intCalib);
                 if (eq.extSched) {
                     extActive++;
-                    if (eq.extCalib) extDone++;
+                    if (extStatus === "DONE" || extStatus === "OVERDUE, DONE") extDone++;
                 }
                 if (eq.intSched) {
                     intActive++;
-                    if (eq.intCalib) intDone++;
+                    if (intStatus === "DONE" || intStatus === "OVERDUE, DONE") intDone++;
                 }
             });
 
-            const extPct = extActive > 0 ? Math.round((extDone / extActive) * 100) : 0;
-            const intPct = intActive > 0 ? Math.round((intDone / intActive) * 100) : 0;
-
+            const extPct = extActive ? Math.round((extDone / extActive) * 100) : 0;
+            const intPct = intActive ? Math.round((intDone / intActive) * 100) : 0;
             document.getElementById("ext-percent-text").innerText = `${extPct}%`;
             document.getElementById("ext-active-num").innerText = extActive;
             document.getElementById("ext-done-num").innerText = extDone;
-
             document.getElementById("int-percent-text").innerText = `${intPct}%`;
             document.getElementById("int-active-num").innerText = intActive;
             document.getElementById("int-done-num").innerText = intDone;
 
-            // Render Doughnut Gauges
             const ctxExt = document.getElementById('gauge-ext-calib').getContext('2d');
             if (gaugeExt) gaugeExt.destroy();
             gaugeExt = new Chart(ctxExt, {
                 type: 'doughnut',
-                data: {
-                    datasets: [{
-                        data: [extDone, Math.max(0, extActive - extDone)],
-                        backgroundColor: ['#3b82f6', '#334155'],
-                        borderWidth: 0
-                    }]
-                },
+                data: { labels: ['Completed', 'Remaining'], datasets: [{ data: [extDone, Math.max(0, extActive - extDone)], backgroundColor: ['#3b82f6', '#334155'], borderWidth: 0 }] },
                 options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } }
             });
 
@@ -2965,13 +2914,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (gaugeInt) gaugeInt.destroy();
             gaugeInt = new Chart(ctxInt, {
                 type: 'doughnut',
-                data: {
-                    datasets: [{
-                        data: [intDone, Math.max(0, intActive - intDone)],
-                        backgroundColor: ['#a855f7', '#334155'],
-                        borderWidth: 0
-                    }]
-                },
+                data: { labels: ['Completed', 'Remaining'], datasets: [{ data: [intDone, Math.max(0, intActive - intDone)], backgroundColor: ['#a855f7', '#334155'], borderWidth: 0 }] },
                 options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } }
             });
         }
