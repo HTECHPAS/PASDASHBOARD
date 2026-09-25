@@ -3329,8 +3329,6 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("calib-kpi-overdue").innerText = tOverdue;
             const overdueDoneEl = document.getElementById("calib-kpi-overdue-done");
             if (overdueDoneEl) overdueDoneEl.innerText = tOverdueDone;
-            if (extCompletedEl) extCompletedEl.innerText = ext.DONE + ext["OVERDUE, DONE"];
-            if (intCompletedEl) intCompletedEl.innerText = int.DONE + int["OVERDUE, DONE"];
             const statusCard = (label, value, cls) => `<div class="bg-slate-800/70 border border-slate-700/50 rounded-lg p-2"><div class="text-[9px] text-slate-500">${label}</div><div class="text-sm font-black ${cls}">${value}</div></div>`;
             const statusOrder = [['DONE','text-emerald-400'],['OVERDUE, DONE','text-orange-400'],['OVERDUE','text-red-400'],['PENDING','text-amber-400'],['STSOK','text-blue-400'],['NA','text-slate-400']];
             document.getElementById('calib-external-breakdown').innerHTML = statusOrder.map(([k,c]) => statusCard(k, ext[k] || 0, c)).join('');
@@ -3352,7 +3350,7 @@ window.addEventListener("cloudsync:status", (event) => {
             tbody.innerHTML = "";
 
             if (groups.size === 0) {
-                tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-slate-500 italic">No equipment entries found matching criteria.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="13" class="text-center py-6 text-slate-500 italic">No equipment entries found matching criteria.</td></tr>`;
                 return;
             }
 
