@@ -220,8 +220,9 @@ window.CloudSync = (() => {
     /*
       NORMALIZED CLOUD STORAGE
       ------------------------
-      The dashboard keeps its existing localStorage UI state, but cloud data
-      is now stored in separate PostgreSQL tables instead of one giant JSON
+      Supabase is the source of truth for shared dashboard data. localStorage
+      is only a browser working/cache layer and must never override a successful
+      cloud pull. Cloud data is stored in separate PostgreSQL tables instead of one giant JSON
       document. This makes the system much more scalable and searchable.
 
       Tables:
@@ -520,6 +521,7 @@ window.CloudSync = (() => {
         pull,
         push,
         isConfigured: configured,
+        isReady: () => ready,
         getLastError: () => lastError,
         keys: [
             ...Object.values(DATASETS).map(x => x.key),
@@ -548,12 +550,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         const cloudResult = await window.CloudSync.start();
 
         if (cloudResult.ok) {
-            if (typeof loadSavedStorage === "function") {
-                try { loadSavedStorage(); } catch (e) { console.warn("Cloud state reload:", e); }
-            }
-            if (typeof loadSavedUsers === "function") {
-                try { loadSavedUsers(); } catch (e) { console.warn("Cloud users reload:", e); }
-            }
+            /* CloudSync.pull() has already written the authoritative Supabase
+               data into the working arrays. Do NOT reload localStorage here,
+               because that would let each browser's old cache overwrite cloud data. */
         }
 
         if (typeof checkAuth === "function") {
@@ -2178,7 +2177,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         };
 
         function initApp() {
-            loadSavedStorage();
+            if (window.CloudSync?.isConfigured?.()) {
+                if (!window.CloudSync.isReady?.()) {
+                    console.warn("Cloud data is not ready; localStorage will not override Supabase.");
+                    return;
+                }
+            } else {
+                loadSavedStorage();
+            }
             populateCategoryDropdowns();
             populateDowntimeCategoryDropdowns();
             populateUptimeEquipCategoryDropdowns();
@@ -2191,6 +2197,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         function loadSavedStorage() {
+            if (window.CloudSync?.isConfigured?.() && window.CloudSync.isReady?.()) {
+                return;
+            }
             const savedEq = localStorage.getItem("suite_equipment_data");
             const savedDt = localStorage.getItem("suite_downtime_data");
             const savedPr = localStorage.getItem("suite_projects_data");
