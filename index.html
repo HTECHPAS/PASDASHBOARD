@@ -12,16 +12,11 @@
    ------------------------------------------------------------
    1) Create a free Supabase project.
    2) Run SUPABASE_SETUP.sql in Supabase SQL Editor.
-   3) Paste your Supabase Publishable Key below.
-   4) The Project URL is already configured for PASDASHBOARD.
-   5) Upload this HTML to GitHub Pages or another HTTPS host.
-
-   SECURITY: Never place a Supabase Secret Key, service_role key, or
-   database password in this file.
+   3) Paste your Project URL and Publishable Key below.
+   4) Upload this HTML to your web host.
    ============================================================ */
 window.CLOUD_CONFIG = {
-    // Set true after you replace the publishable-key placeholder below.
-    enabled: true,
+    enabled: false,
     projectUrl: "https://hdgwrkywswxxetgvcwje.supabase.co",
     publishableKey: "sb_publishable_sCfRtmewGMknvcTqPGkudg_jvl-7D4u",
     appId: "PASDASHBOARD"
@@ -30,190 +25,65 @@ window.CLOUD_CONFIG = {
 window.CloudAuth = (() => {
     let client = null;
     let profile = null;
-    const EDGE_FUNCTION_URL = "https://hdgwrkywswxetgvcwje.supabase.co/functions/v1/dashboard-user-admin";
-    const INTERNAL_USER_DOMAIN = "pasdashboard.local";
-
-    function normalizeUsername(value) {
-        return String(value || "").trim().toLowerCase();
-    }
-
-    function usernameToAuthEmail(username) {
-        return `${normalizeUsername(username)}@${INTERNAL_USER_DOMAIN}`;
-    }
-
+    const EDGE_FUNCTION = "dashboard-user-admin";
+    const INTERNAL_DOMAIN = "pasdashboard.local";
     function init() {
         if (!window.CLOUD_CONFIG.enabled || !window.supabase?.createClient) return false;
-        client = window.supabase.createClient(
-            window.CLOUD_CONFIG.projectUrl,
-            window.CLOUD_CONFIG.publishableKey,
-            { auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false } }
-        );
+        client = window.supabase.createClient(window.CLOUD_CONFIG.projectUrl, window.CLOUD_CONFIG.publishableKey);
         return true;
     }
-
+    function normalizeUsername(v) { return String(v || "").trim().toLowerCase(); }
+    function internalEmail(username) { return normalizeUsername(username) + "@" + INTERNAL_DOMAIN; }
     async function getProfile(userId) {
         if (!client || !userId) return null;
-        const { data, error } = await client
-            .from("profiles")
-            .select("id,email,username,role,is_main")
-            .eq("id", userId)
-            .maybeSingle();
-        if (error) {
-            profile = null;
-            return null;
-        }
+        const { data } = await client.from("profiles").select("id,email,username,role,is_main").eq("id", userId).maybeSingle();
         profile = data || null;
         return profile;
     }
-
     async function restoreSession() {
         if (!client) return null;
         const { data } = await client.auth.getSession();
         const user = data?.session?.user;
-        if (!user) {
-            profile = null;
-            return null;
-        }
+        if (!user) return null;
         return await getProfile(user.id);
     }
-
-    async function callEdge(action, payload = {}) {
-        try {
-            let accessToken = "";
-            if (client) {
-                const { data } = await client.auth.getSession();
-                accessToken = data?.session?.access_token || "";
-            }
-
-            const headers = { "Content-Type": "application/json" };
-            if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-
-            const response = await fetch(EDGE_FUNCTION_URL, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ action, ...payload })
-            });
-
-            let result = null;
-            try { result = await response.json(); } catch (_) { result = null; }
-            if (!response.ok || !result?.ok) {
-                return { ok: false, error: result?.error || `Request failed (${response.status}).` };
-            }
-            return result;
-        } catch (error) {
-            return { ok: false, error: error?.message || "Unable to connect to the user service." };
-        }
+    async function edge(body) {
+        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
+        const { data, error } = await client.functions.invoke(EDGE_FUNCTION, { body });
+        if (error) return { ok:false, error:error.message || "User service request failed." };
+        return data || { ok:false, error:"User service returned no response." };
     }
-
     async function signIn(identifier, password) {
         if (!client) return { ok:false, error:"Cloud authentication is not configured." };
         const raw = String(identifier || "").trim();
-        if (!raw || !password) return { ok:false, error:"Enter your username/email and password." };
-
-        // Main Account uses its real email. Non-main users use username only.
+        if (!raw || !password) return { ok:false, error:"Username/email and password are required." };
         if (raw.includes("@")) {
             const { data, error } = await client.auth.signInWithPassword({ email: raw, password });
-            if (error) return { ok:false, error:"Invalid username/email or password." };
+            if (error) return { ok:false, error:"Invalid email or password." };
             const p = await getProfile(data.user.id);
-            if (!p) {
-                await client.auth.signOut();
-                return { ok:false, error:"User profile is not configured." };
-            }
+            if (!p) { await client.auth.signOut(); return { ok:false, error:"User profile is not configured." }; }
             return { ok:true, user:data.user, profile:p };
         }
-
-        const cleanUsername = normalizeUsername(raw);
-        const result = await callEdge("login", { username: cleanUsername, password });
-        if (!result.ok) return result;
-        if (!result.session?.access_token || !result.session?.refresh_token) {
-            return { ok:false, error:"Login service did not return a valid session." };
-        }
-
-        const { error: sessionError } = await client.auth.setSession({
-            access_token: result.session.access_token,
-            refresh_token: result.session.refresh_token
-        });
-        if (sessionError) return { ok:false, error:sessionError.message };
-
-        profile = result.profile || null;
-        return { ok:true, user:result.session.user, profile:profile };
+        const result = await edge({ action:"login", username:normalizeUsername(raw), password });
+        if (!result.ok || !result.session) return { ok:false, error:result.error || "Invalid username or password." };
+        const { data, error } = await client.auth.setSession(result.session);
+        if (error || !data?.user) return { ok:false, error:error?.message || "Unable to start account session." };
+        const p = await getProfile(data.user.id);
+        if (!p) { await client.auth.signOut(); return { ok:false, error:"User profile is not configured." }; }
+        return { ok:true, user:data.user, profile:p };
     }
-
-    async function signOut() {
-        if (client) {
-            try { await client.auth.signOut(); } catch (_) {}
-        }
-        profile = null;
-    }
-
+    async function signOut() { if (client) await client.auth.signOut(); profile = null; }
     async function createUser(username, password, role) {
-        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
-        const current = await client.auth.getUser();
-        if (!current?.data?.user) return { ok:false, error:"Main Account session required." };
-
-        const adminProfile = await getProfile(current.data.user.id);
-        if (adminProfile?.role !== "admin" || adminProfile?.is_main !== true) {
-            return { ok:false, error:"Only the Main Account can create users." };
-        }
-
-        const cleanUsername = normalizeUsername(username);
-        if (!/^[a-z0-9][a-z0-9._-]{2,30}$/.test(cleanUsername)) {
-            return { ok:false, error:"Username must be 3-31 characters using letters, numbers, dot, dash, or underscore." };
-        }
-        if (cleanUsername.includes("@")) {
-            return { ok:false, error:"Additional users use a username only. Do not enter an email address." };
-        }
-        if (cleanUsername === normalizeUsername(adminProfile.username)) {
-            return { ok:false, error:"Choose a different username." };
-        }
-        if (String(password || "").length < 6) {
-            return { ok:false, error:"Password must be at least 6 characters." };
-        }
-
-        const result = await callEdge("create", {
-            username: cleanUsername,
-            password,
-            role: role === "admin" ? "admin" : "viewer"
-        });
-        if (result.ok) profile = adminProfile;
-        return result.ok ? { ...result, username:cleanUsername } : result;
+        return await edge({ action:"create", username:normalizeUsername(username), password, role:role === "admin" ? "admin" : "viewer" });
     }
-
     async function setRole(userId, role) {
-        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
-        const current = await client.auth.getUser();
-        if (!current?.data?.user) return { ok:false, error:"Main Account session required." };
-        const me = await getProfile(current.data.user.id);
-        if (me?.role !== "admin" || me?.is_main !== true) {
-            return { ok:false, error:"Only the Main Account can manage users." };
-        }
-        return await callEdge("set_role", {
-            user_id: userId,
-            role: role === "admin" ? "admin" : "viewer"
-        });
+        return await edge({ action:"set_role", user_id:userId, role:role === "admin" ? "admin" : "viewer" });
     }
-
     async function listUsers() {
-        if (!client) return [];
-        const current = await client.auth.getUser();
-        if (!current?.data?.user) return [];
-        const me = await getProfile(current.data.user.id);
-        if (me?.role !== "admin" || me?.is_main !== true) return [];
-        const result = await callEdge("list");
-        return result.ok ? (result.users || []) : [];
+        const result = await edge({ action:"list" });
+        return result.users || [];
     }
-
-    return {
-        init,
-        restoreSession,
-        signIn,
-        signOut,
-        createUser,
-        setRole,
-        listUsers,
-        getProfile: () => profile,
-        getClient: () => client
-    };
+    return { init, restoreSession, signIn, signOut, createUser, setRole, listUsers, getProfile:()=>profile, getClient:()=>client };
 })();
 
 window.CloudSync = (() => {
@@ -291,7 +161,7 @@ window.CloudSync = (() => {
             window.CLOUD_CONFIG.publishableKey,
             {
                 auth: {
-                    persistSession: false,
+                    persistSession: true,
                     autoRefreshToken: true,
                     detectSessionInUrl: true
                 }
@@ -1556,14 +1426,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             <!-- ADD / MANAGE SUB-USERS SECTION (Main Account Authority) -->
             <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-3">
                 <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-user-plus text-emerald-400 mr-1.5"></i> Authorized Operators / Users</h4>
-                <p class="text-[11px] text-slate-400">Create additional accounts using a username and password only. The Main Account continues to use its email address.</p>
+                <p class="text-[11px] text-slate-400">Add authorized user profiles who can open and view the application.</p>
 
                 <form onsubmit="handleAddUserSubmit(event)" class="space-y-3 text-xs pt-1">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
                         <div>
                             <label class="block text-slate-300 font-semibold mb-1">Username *</label>
                             <input type="text" id="new-user-name" required placeholder="Username" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
-                            <p class="text-[9px] text-slate-500 mt-1">Username only — no email required.</p>
                         </div>
                         <div>
                             <label class="block text-slate-300 font-semibold mb-1">Password *</label>
@@ -1577,7 +1446,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             </select>
                         </div>
                     </div>
-                    <p class="text-[10px] text-slate-500">Full Access users can edit dashboard records but cannot manage users. View Only users can view records without changing them. Only the Main Account can create or manage accounts.</p>
+                    <p class="text-[10px] text-slate-500">Full Access users can use the same editing, adding, deleting, calibration, uptime, project, and user-management functions as the main account. View Only users can view records without changing them.</p>
                     <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-xl transition shadow-md">
                         Add User Account
                     </button>
@@ -1762,22 +1631,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         let CURRENT_ROLE = "admin";
         let CURRENT_IS_MAIN = false;
 
-        function isAdminUser() {
-            return CURRENT_ROLE === "admin";
-        }
-
-        function isMainAccount() {
-            return CURRENT_IS_MAIN === true;
-        }
+        function isAdminUser() { return CURRENT_ROLE === "admin"; }
+        function isMainAccount() { return CURRENT_IS_MAIN === true; }
 
         function applyAccessUI() {
             const isAdmin = isAdminUser();
-            const isMain = isMainAccount();
             const appContent = document.getElementById("app-content");
             if (appContent) appContent.classList.toggle("viewer-mode", !isAdmin);
 
             const settingsBtn = document.getElementById("main-acc-settings-btn");
-            if (settingsBtn) settingsBtn.classList.toggle("hidden", !isMain);
+            if (settingsBtn) settingsBtn.classList.toggle("hidden", !isMainAccount());
 
             // Viewer = view-only across all modules. Admin = full access.
             document.querySelectorAll(".admin-only").forEach(el => {
@@ -1810,22 +1673,27 @@ document.addEventListener("DOMContentLoaded", async () => {
             return await window.CloudAuth.restoreSession();
         }
 
-        function checkAuth() {
+        async function checkAuth() {
             const isAuth = sessionStorage.getItem("authenticated") === "true";
             const loggedUser = sessionStorage.getItem("logged_user");
+            if (isAuth && await cloudAuthEnabled()) {
+                const fresh = await window.CloudAuth.restoreSession();
+                if (!fresh) { sessionStorage.clear(); CURRENT_ROLE = "viewer"; CURRENT_IS_MAIN = false; document.getElementById("login-screen").classList.remove("hidden"); document.getElementById("app-content").classList.add("hidden"); return; }
+                CURRENT_ROLE = fresh.role === "admin" ? "admin" : "viewer";
+                CURRENT_IS_MAIN = fresh.is_main === true;
+                sessionStorage.setItem("logged_role", CURRENT_ROLE);
+                sessionStorage.setItem("logged_is_main", CURRENT_IS_MAIN ? "true" : "false");
+                sessionStorage.setItem("logged_user", fresh.is_main ? (fresh.email || loggedUser || "") : (fresh.username || loggedUser || ""));
+            }
             const loggedRole = sessionStorage.getItem("logged_role") || (loggedUser === AUTH_USER ? "admin" : "viewer");
-            const loggedIsMain = sessionStorage.getItem("logged_is_main") === "true";
-
             if (isAuth) {
                 CURRENT_ROLE = loggedRole;
-                CURRENT_IS_MAIN = loggedIsMain;
                 document.getElementById("login-screen").classList.add("hidden");
                 document.getElementById("app-content").classList.remove("hidden");
                 applyAccessUI();
                 initApp();
             } else {
                 CURRENT_ROLE = "viewer";
-                CURRENT_IS_MAIN = false;
                 document.getElementById("app-content").classList.remove("viewer-mode");
                 document.getElementById("login-screen").classList.remove("hidden");
                 document.getElementById("app-content").classList.add("hidden");
@@ -1842,13 +1710,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const result = await window.CloudAuth.signIn(u, p);
                 if (result.ok) {
                     sessionStorage.setItem("authenticated", "true");
-                    sessionStorage.setItem("logged_user", result.profile.email || u);
+                    sessionStorage.setItem("logged_user", result.profile.is_main ? (result.profile.email || u) : (result.profile.username || u));
                     sessionStorage.setItem("logged_role", result.profile.role === "admin" ? "admin" : "viewer");
                     sessionStorage.setItem("logged_is_main", result.profile.is_main ? "true" : "false");
                     CURRENT_ROLE = result.profile.role === "admin" ? "admin" : "viewer";
                     CURRENT_IS_MAIN = result.profile.is_main === true;
                     err.classList.add("hidden");
-                    checkAuth();
+                    await checkAuth();
                     return;
                 }
                 err.textContent = result.error || "Invalid email or password.";
@@ -1868,11 +1736,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 sessionStorage.setItem("authenticated", "true");
                 sessionStorage.setItem("logged_user", u);
                 sessionStorage.setItem("logged_role", role);
-                sessionStorage.setItem("logged_is_main", u === AUTH_USER ? "true" : "false");
                 CURRENT_ROLE = role;
-                CURRENT_IS_MAIN = u === AUTH_USER;
                 err.classList.add("hidden");
-                checkAuth();
+                await checkAuth();
             } else {
                 err.textContent = "Invalid username or password!";
                 err.classList.remove("hidden");
@@ -1962,7 +1828,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!username || !upass) return;
 
             if (await cloudAuthEnabled()) {
-                if (username.includes("@")) { alert("Additional users use a username only. Do not enter an email address."); return; }
+                if (!/^[a-z0-9][a-z0-9._-]{2,30}$/.test(username.toLowerCase())) { alert("Username must be 3-31 characters using letters, numbers, dot, dash, or underscore."); return; }
                 const result = await window.CloudAuth.createUser(username, upass, role);
                 if (!result.ok) { alert(result.error || "Unable to create user."); return; }
                 document.getElementById("new-user-name").value = "";
@@ -2003,7 +1869,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     item.className = "flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2 rounded-xl text-xs gap-2";
                     item.innerHTML = `
                         <div class="min-w-0">
-                            <div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.username || "User")}</div>
+                            <div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.username || usr.email || "User")}</div>
                             <div class="text-[9px] ${isFull ? "text-emerald-400" : "text-amber-400"} ml-5 font-bold">${isFull ? "Full Access" : "View Only"}</div>
                         </div>
                         <div class="flex items-center gap-1">
@@ -2029,7 +1895,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         async function toggleCloudUserRole(userId) {
-            if (!isMainAccount()) return;
+            if (!isAdminUser()) return;
             const users = await window.CloudAuth.listUsers();
             const usr = users.find(u => u.id === userId);
             if (!usr) return;
@@ -2047,7 +1913,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         function deleteSubUser(idx) {
-            if (CURRENT_ROLE !== "admin") return;
+            if (!isMainAccount()) return;
             if (confirm("Are you sure you want to remove access for this user?")) {
                 additionalUsers.splice(idx, 1);
                 localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
@@ -2127,13 +1993,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         let chartDowntimePareto = null;
 
         window.onload = function() {
-            // Require login again after every browser refresh.
-            sessionStorage.removeItem("authenticated");
-            sessionStorage.removeItem("logged_user");
-            sessionStorage.removeItem("logged_role");
-            sessionStorage.removeItem("logged_is_main");
-            CURRENT_ROLE = "viewer";
-            CURRENT_IS_MAIN = false;
             loadSavedUsers();
             checkAuth();
         };
