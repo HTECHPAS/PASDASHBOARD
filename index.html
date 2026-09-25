@@ -624,8 +624,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         .chart-box-container {
             position: relative;
             width: 100%;
-            height: 240px !important;
-            max-height: 240px !important;
+            height: 200px !important;
+            max-height: 200px !important;
             overflow: hidden;
             display: flex;
             align-items: center;
@@ -634,7 +634,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         .chart-box-container canvas {
             max-width: 100% !important;
-            max-height: 240px !important;
+            max-height: 200px !important;
         }
 
         @media print {
@@ -845,11 +845,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         </header>
 
         <!-- Main Content Container -->
-        <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 space-y-6">
+        <main class="flex-1 max-w-7xl w-full mx-auto p-3 lg:p-4 space-y-3">
 
             <!-- MODULE 0: REPORT SUMMARY -->
-            <section id="module-summary" class="space-y-6">
-                <div class="flex items-center justify-between bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60 flex-wrap gap-2">
+            <section id="module-summary" class="space-y-3">
+                <div class="flex items-center justify-between bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 flex-wrap gap-2">
                     <div>
                         <h3 class="text-sm font-bold text-white flex items-center gap-2">
                             <i class="fa-solid fa-square-poll-vertical text-blue-400"></i> <span id="summary-area-title">Executive Plant Operations & Automation Summary - All Plants</span>
@@ -874,56 +874,43 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl">
                         <div class="flex justify-between items-center text-xs text-slate-400 font-semibold mb-1">
                             <span>Equipment Availability</span>
                             <i class="fa-solid fa-circle-check text-emerald-400"></i>
                         </div>
-                        <h3 id="summary-availability-rate" class="text-3xl font-black text-emerald-400">0%</h3>
+                        <h3 id="summary-availability-rate" class="text-2xl font-black text-emerald-400">0%</h3>
                         <p class="text-[10px] text-slate-400 mt-1">% Operational Time</p>
                     </div>
 
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl">
                         <div class="flex justify-between items-center text-xs text-slate-400 font-semibold mb-1">
                             <span>Calibration Health</span>
                             <i class="fa-solid fa-sliders text-blue-400"></i>
                         </div>
-                        <h3 id="summary-calib-compliance" class="text-3xl font-black text-blue-400">0%</h3>
+                        <h3 id="summary-calib-compliance" class="text-2xl font-black text-blue-400">0%</h3>
                         <p class="text-[10px] text-slate-400 mt-1">Total Scheduled Compliance</p>
                     </div>
 
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl">
                         <div class="flex justify-between items-center text-xs text-slate-400 font-semibold mb-1">
                             <span>Overall System Uptime</span>
                             <i class="fa-solid fa-bolt text-amber-400"></i>
                         </div>
-                        <h3 id="summary-uptime-rate" class="text-3xl font-black text-cyan-400">0%</h3>
+                        <h3 id="summary-uptime-rate" class="text-2xl font-black text-cyan-400">0%</h3>
                         <p class="text-[10px] text-slate-400 mt-1">Reliability Target &gt;95%</p>
                     </div>
 
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl">
-                        <div class="flex justify-between items-center text-xs text-slate-400 font-semibold mb-1">
-                            <span>Overdue Calibrations</span>
-                            <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
-                        </div>
-                        <h3 id="summary-overdue-count" class="text-3xl font-black text-red-400">0</h3>
-                        <p class="text-[10px] text-slate-400 mt-1">Action Required Immediately</p>
-                    </div>
-
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl">
-                        <div class="flex justify-between items-center text-xs text-slate-400 font-semibold mb-1">
-                            <span>Active Projects</span>
-                            <i class="fa-solid fa-list-check text-indigo-400"></i>
-                        </div>
-                        <h3 id="summary-projects-count" class="text-3xl font-black text-indigo-400">0</h3>
+                    
+                        <h3 id="summary-projects-count" class="text-2xl font-black text-indigo-400">0</h3>
                         <p class="text-[10px] text-slate-400 mt-1">Engineering Upgrades</p>
                     </div>
                 </div>
 
                 <!-- ALL THREE GRAPHS BESIDE EACH OTHER IN A 3-COLUMN GRID -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl space-y-3 overflow-hidden flex flex-col justify-between">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-3 overflow-hidden flex flex-col justify-between">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-pie text-emerald-400"></i> Calibration Status Breakdown
                         </h4>
@@ -932,7 +919,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         </div>
                     </div>
 
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl space-y-3 overflow-hidden flex flex-col justify-between">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-3 overflow-hidden flex flex-col justify-between">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress
                         </h4>
@@ -941,53 +928,90 @@ document.addEventListener("DOMContentLoaded", async () => {
                         </div>
                     </div>
 
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl space-y-3 overflow-hidden flex flex-col justify-between">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-3 overflow-hidden flex flex-col justify-between">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-bar text-amber-400"></i> Downtime Pareto Analysis
                         </h4>
                         <div class="chart-box-container">
                             <canvas id="chart-summary-pareto"></canvas>
                         </div>
-                        <p class="text-[10px] text-slate-400 text-center">Duration by Line & Category Indication</p>
+                        <p class="text-[9px] text-slate-500 text-center">Downtime hours by equipment / line</p>
                     </div>
                 </div>
 
                 <!-- SUPPORTING DETAILS BELOW THE GRAPHS -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl space-y-3">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-3">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-list-check text-emerald-400"></i> Calibration Status Supporting Details — Per Plant
+                            <i class="fa-solid fa-list-check text-emerald-400"></i> Calibration Status Supporting Details
                         </h4>
-                        <p class="text-[10px] text-slate-500">Completion only: calibrated DONE / total scheduled calibration records.</p>
-                        <div id="summary-per-plant-calib" class="grid grid-cols-1 gap-3 pt-2"></div>
+                        <div id="summary-per-plant-calib" class="space-y-2 pt-2"></div>
                     </div>
 
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl space-y-3">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-3">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-list-check text-blue-400"></i> Project Status Supporting Details — Per Plant
+                            <i class="fa-solid fa-list-check text-blue-400"></i> Project Status Supporting Details
                         </h4>
-                        <p class="text-[10px] text-slate-500">Completion percentage only, followed by the project list grouped by status.</p>
-                        <div id="summary-per-plant-projects" class="grid grid-cols-1 gap-3 pt-2"></div>
+                        <div id="summary-per-plant-projects" class="space-y-2 pt-2"></div>
                     </div>
                 </div>
 
-                <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl space-y-4 overflow-hidden">
+                <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-4 overflow-hidden">
                     <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
-                        <div>
-                            <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-clock-rotate-left text-amber-400"></i> System Reliability & Top Equipment / Lines by Downtime — Per Plant
-                            </h4>
-                            <p class="text-[10px] text-slate-500 mt-1">Each plant is shown separately so downtime and reliability are not mixed between plants.</p>
-                        </div>
-                        <span id="summary-dt-area-tag" class="text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">Per Plant</span>
+                        <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-clock-rotate-left text-amber-400"></i> System Reliability & Top Equipment / Lines by Downtime
+                        </h4>
+                        <span id="summary-dt-area-tag" class="text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">All Area Context</span>
                     </div>
-                    <div id="summary-per-plant-reports" class="space-y-4"></div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
+                        <div class="lg:col-span-12 space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div class="bg-slate-900/60 border border-slate-700/50 p-4 rounded-xl">
+                                    <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Area Downtime</span>
+                                    <p id="summary-dt-hours" class="text-2xl font-black text-red-400 mt-1">0 hrs</p>
+                                    <p class="text-[10px] text-slate-500 mt-0.5">Cumulative outage duration</p>
+                                </div>
+                                <div class="bg-slate-900/60 border border-slate-700/50 p-4 rounded-xl">
+                                    <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">MTBF</span>
+                                    <p id="summary-dt-mtbf" class="text-2xl font-black text-blue-400 mt-1">0 hrs</p>
+                                    <p class="text-[10px] text-slate-500 mt-0.5">Average operational interval</p>
+                                </div>
+                                <div class="bg-slate-900/60 border border-slate-700/50 p-4 rounded-xl">
+                                    <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">MTTR</span>
+                                    <p id="summary-dt-mttr" class="text-2xl font-black text-amber-400 mt-1">0 mins</p>
+                                    <p class="text-[10px] text-slate-500 mt-0.5">Average resolution response time</p>
+                                </div>
+                            </div>
+
+                            <div id="summary-per-plant-reports" class="space-y-3"></div>
+
+                            <div class="space-y-2">
+                                <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment / Lines by Downtime</h5>
+                                <div class="overflow-x-auto rounded-xl border border-slate-700/50">
+                                    <table class="w-full text-left text-xs text-slate-300">
+                                        <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
+                                            <tr>
+                                                <th class="py-2.5 px-3 w-12 text-center">Rank</th>
+                                                <th class="py-2.5 px-3">Equipment / Line Name</th>
+                                                <th class="py-2.5 px-3 text-center">Indication</th>
+                                                <th class="py-2.5 px-3 text-center">Incidents</th>
+                                                <th class="py-2.5 px-3 text-center">Duration</th>
+                                                <th class="py-2.5 px-3 text-right">% Downtime</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="summary-top5-downtime-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
             <!-- MODULE 1: CALIBRATION TRACKING & MANAGEMENT -->
             <section id="module-calibration" class="space-y-6 hidden">
-                <div class="flex items-center justify-between bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60 flex-wrap gap-2">
+                <div class="flex items-center justify-between bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 flex-wrap gap-2">
                     <div class="flex items-center gap-2 text-xs font-semibold text-slate-300">
                         <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                         <h3 class="font-bold text-white"><span id="calib-area-title">Calibration Management Report - All Plants</span></h3>
@@ -1009,8 +1033,50 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                 </div>
 
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-3">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
+                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Instrument Count Total</span>
+                        <span id="calib-kpi-total-note" class="block text-[9px] text-slate-500 mt-0.5">Each equipment code = 1 instrument</span>
+                        <p id="calib-kpi-total" class="text-2xl font-black text-white mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
+                        <span class="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">DONE</span>
+                        <p id="calib-kpi-done" class="text-2xl font-black text-emerald-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-800/90 border border-orange-500/20 p-4 rounded-2xl">
+                        <span class="text-[10px] text-orange-400 uppercase font-bold tracking-wider">OVERDUE, DONE</span>
+                        <p id="calib-kpi-overdue-done" class="text-2xl font-black text-orange-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
+                        <span class="text-[10px] text-red-400 uppercase font-bold tracking-wider">OVERDUE</span>
+                        <p id="calib-kpi-overdue" class="text-2xl font-black text-red-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
+                        <span class="text-[10px] text-amber-400 uppercase font-bold tracking-wider">PENDING (&lt;3mo)</span>
+                        <p id="calib-kpi-pending" class="text-2xl font-black text-amber-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
+                        <span class="text-[10px] text-blue-400 uppercase font-bold tracking-wider">STSOK (&gt;3mo)</span>
+                        <p id="calib-kpi-stsok" class="text-2xl font-black text-blue-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
+                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">NO SCHED</span>
+                        <p id="calib-kpi-na" class="text-2xl font-black text-slate-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-800/90 border border-blue-500/20 p-4 rounded-2xl">
+                        <span class="text-[10px] text-blue-300 uppercase font-bold tracking-wider">EXT COMPLETED</span>
+                        <p id="calib-kpi-ext-completed" class="text-2xl font-black text-blue-300 mt-1">0</p>
+                        <span class="text-[9px] text-slate-500">DONE + OVERDUE, DONE</span>
+                    </div>
+                    <div class="bg-slate-800/90 border border-purple-500/20 p-4 rounded-2xl">
+                        <span class="text-[10px] text-purple-300 uppercase font-bold tracking-wider">INT COMPLETED</span>
+                        <p id="calib-kpi-int-completed" class="text-2xl font-black text-purple-300 mt-1">0</p>
+                        <span class="text-[9px] text-slate-500">DONE + OVERDUE, DONE</span>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl flex flex-col sm:flex-row items-center gap-6 overflow-hidden">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col sm:flex-row items-center gap-6 overflow-hidden">
                         <div class="relative w-36 h-36 flex-shrink-0 chart-box-container" style="height: 140px !important; max-height: 140px !important;">
                             <canvas id="gauge-ext-calib"></canvas>
                             <div class="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
@@ -1028,7 +1094,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         </div>
                     </div>
 
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl flex flex-col sm:flex-row items-center gap-6 overflow-hidden">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col sm:flex-row items-center gap-6 overflow-hidden">
                         <div class="relative w-36 h-36 flex-shrink-0 chart-box-container" style="height: 140px !important; max-height: 140px !important;">
                             <canvas id="gauge-int-calib"></canvas>
                             <div class="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
@@ -1104,7 +1170,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             <!-- MODULE 2: PROCESS AUTOMATION UPTIME / DOWNTIME REPORTING -->
             <section id="module-uptime" class="space-y-6 hidden">
-                <div class="flex items-center justify-between bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60 flex-wrap gap-2">
+                <div class="flex items-center justify-between bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 flex-wrap gap-2">
                     <div>
                         <h3 class="text-sm font-bold text-white"><span id="uptime-area-title">Process Automation Uptime & Downtime Report - All Plants</span></h3>
                         <p class="text-xs text-slate-400">Reliability metrics, MTBF, MTTR & equipment failure analysis</p>
@@ -1149,24 +1215,24 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl relative">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl relative">
                         <p class="text-xs text-slate-400 font-semibold">Uptime Percentage</p>
-                        <h3 id="uptime-kpi-percent" class="text-3xl font-black text-emerald-400 mt-1">100%</h3>
+                        <h3 id="uptime-kpi-percent" class="text-2xl font-black text-emerald-400 mt-1">100%</h3>
                         <p id="uptime-compare-pct-label" class="text-[10px] text-slate-400 mt-1">Target Operational Efficiency: &gt;95%</p>
                     </div>
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl">
                         <p class="text-xs text-slate-400 font-semibold">Total Downtime Duration</p>
-                        <h3 id="uptime-kpi-hours" class="text-3xl font-black text-red-400 mt-1">0 hrs</h3>
+                        <h3 id="uptime-kpi-hours" class="text-2xl font-black text-red-400 mt-1">0 hrs</h3>
                         <p id="uptime-compare-hrs-label" class="text-[10px] text-slate-400 mt-1">Across Selected Plant Lines</p>
                     </div>
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl">
                         <p class="text-xs text-slate-400 font-semibold">MTBF (Mean Time Between Failures)</p>
-                        <h3 id="uptime-kpi-mtbf" class="text-3xl font-black text-blue-400 mt-1">0 hrs</h3>
+                        <h3 id="uptime-kpi-mtbf" class="text-2xl font-black text-blue-400 mt-1">0 hrs</h3>
                         <p class="text-[10px] text-slate-400 mt-1">Reliability Metric</p>
                     </div>
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl">
                         <p class="text-xs text-slate-400 font-semibold">MTTR (Mean Time To Repair)</p>
-                        <h3 id="uptime-kpi-mttr" class="text-3xl font-black text-amber-400 mt-1">0 mins</h3>
+                        <h3 id="uptime-kpi-mttr" class="text-2xl font-black text-amber-400 mt-1">0 mins</h3>
                         <p class="text-[10px] text-slate-400 mt-1">Average Recovery Time</p>
                     </div>
                 </div>
@@ -1179,7 +1245,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    <div class="lg:col-span-5 bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl space-y-4 no-print">
+                    <div class="lg:col-span-5 bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-4 no-print">
                         <div class="flex items-center justify-between pb-2 border-b border-slate-700">
                             <h3 id="downtime-form-title" class="text-sm font-bold text-white flex items-center gap-2">
                                 <i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Log Downtime Event
@@ -1249,7 +1315,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         </form>
                     </div>
 
-                    <div class="lg:col-span-7 bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl flex flex-col justify-between overflow-hidden">
+                    <div class="lg:col-span-7 bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between overflow-hidden">
                         <div class="flex items-center justify-between pb-2 border-b border-slate-700/50">
                             <h3 class="text-sm font-bold text-white flex items-center gap-2">
                                 <i class="fa-solid fa-chart-bar text-blue-400"></i> Downtime Pareto Analysis (Equipment & Line with Failure Indication)
@@ -1291,7 +1357,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             <!-- MODULE 3: AUTO-GENERATED CALIBRATION CALENDAR -->
             <section id="module-calendar" class="space-y-6 hidden">
-                <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl space-y-4">
+                <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-4">
                     <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pb-3 border-b border-slate-700/60">
                         <div class="flex items-center gap-3">
                             <div>
@@ -1341,7 +1407,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             <!-- MODULE 4: AUTOMATION & ENGINEERING PROJECT UPDATES -->
             <section id="module-projects" class="space-y-6 hidden">
-                <div class="flex items-center justify-between bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60 flex-wrap gap-2">
+                <div class="flex items-center justify-between bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 flex-wrap gap-2">
                     <div>
                         <h3 class="text-sm font-bold text-white"><span id="projects-area-title">Automation Engineering Projects - All Plants</span></h3>
                         <p class="text-xs text-slate-400">Track milestones, upgrade timelines & plant engineering roadmaps</p>
@@ -1371,7 +1437,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
 
                 <!-- Visual Graph Card for Projects per Mill -->
-                <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl space-y-3 overflow-hidden">
+                <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-3 overflow-hidden">
                     <div class="flex items-center justify-between pb-2 border-b border-slate-700/50">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-bar text-blue-400"></i> Project Distribution & Progress per Mill (Plant)
@@ -1383,7 +1449,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                 </div>
 
-                <div class="bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl space-y-3">
+                <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-3">
                     <div class="flex items-center justify-between gap-2">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-timeline text-cyan-400 mr-1.5"></i> Project Timeline & Schedule Computation</h4>
                         <span class="text-[10px] text-slate-500">Edit milestones inside each project card</span>
@@ -2657,7 +2723,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const calibCompliance = totalScheduledCalib > 0 ? Math.round((cDone / totalScheduledCalib) * 100) : 0;
 
             document.getElementById("summary-calib-compliance").innerText = `${calibCompliance}%`;
-            document.getElementById("summary-overdue-count").innerText = cOverdue;
             document.getElementById("summary-projects-count").innerText = filteredPr.length;
 
             // Downtime metrics
@@ -2675,193 +2740,171 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             document.getElementById("summary-availability-rate").innerText = `${availabilityRate}%`;
             document.getElementById("summary-uptime-rate").innerText = `${uptimeRate}%`;
-            if (document.getElementById("summary-dt-hours")) document.getElementById("summary-dt-hours").innerText = `${totalDtHours.toFixed(1)} hrs`;
+            document.getElementById("summary-dt-hours").innerText = `${totalDtHours.toFixed(1)} hrs`;
 
             const mtbf = filteredDt.length > 0 ? (720 / filteredDt.length).toFixed(1) : "0";
             const mttr = filteredDt.length > 0 ? Math.round((totalDtHours / filteredDt.length) * 60) : 0;
-            if (document.getElementById("summary-dt-mtbf")) document.getElementById("summary-dt-mtbf").innerText = `${mtbf} hrs`;
-            if (document.getElementById("summary-dt-mttr")) document.getElementById("summary-dt-mttr").innerText = `${mttr} mins`;
+            document.getElementById("summary-dt-mtbf").innerText = `${mtbf} hrs`;
+            document.getElementById("summary-dt-mttr").innerText = `${mttr} mins`;
 
-            // Supporting details — always show the selected plant, or all plants when "All Plants Overview" is selected.
-            const plantNames = ["Plant 1", "Plant 2", "PreMix"];
-            const visiblePlants = currentPlant === "ALL" ? plantNames : plantNames.filter(p => p === currentPlant);
-            const plantLabel = p => p === "PreMix" ? "PreMix Plant" : p;
-            const esc = value => typeof escapeHtml === "function" ? escapeHtml(String(value ?? "")) : String(value ?? "");
+            // Top Equipment / Lines by Downtime Table
+            const dtMap = {};
+            filteredDt.forEach(dt => {
+                const key = `${dt.code} - ${dt.equipment} (${dt.line})`;
+                const s = new Date(dt.start);
+                const e = new Date(dt.end);
+                const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
+                if (!dtMap[key]) {
+                    dtMap[key] = { name: key, indication: dt.category, count: 0, duration: 0 };
+                }
+                dtMap[key].count += 1;
+                dtMap[key].duration += dur;
+            });
 
+            const sortedDtItems = Object.values(dtMap).sort((a,b) => b.duration - a.duration);
+            const top5Body = document.getElementById("summary-top5-downtime-body");
+            top5Body.innerHTML = "";
+
+            if (sortedDtItems.length === 0) {
+                top5Body.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-slate-500 italic">No downtime records found for this period.</td></tr>`;
+            } else {
+                sortedDtItems.slice(0, 5).forEach((item, idx) => {
+                    const pct = totalDtHours > 0 ? ((item.duration / totalDtHours) * 100).toFixed(1) : 0;
+                    const tr = document.createElement("tr");
+                    tr.className = "hover:bg-slate-800/50 transition";
+                    tr.innerHTML = `
+                        <td class="py-2.5 px-3 text-center font-bold text-slate-400">#${idx + 1}</td>
+                        <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(item.name)}</td>
+                        <td class="py-2.5 px-3 text-center"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.indication)}</span></td>
+                        <td class="py-2.5 px-3 text-center text-slate-300">${item.count}</td>
+                        <td class="py-2.5 px-3 text-center text-red-400 font-bold">${item.duration.toFixed(1)} hrs</td>
+                        <td class="py-2.5 px-3 text-right font-bold text-slate-200">${pct}%</td>
+                    `;
+                    top5Body.appendChild(tr);
+                });
+            }
+
+            // Supporting details breakdown lists
             const calibSupp = document.getElementById("summary-per-plant-calib");
-            calibSupp.innerHTML = visiblePlants.map(plant => {
-                const eqs = equipmentList.filter(eq => {
-                    if (eq.plant !== plant) return false;
-                    return checkDateMatchFilter(eq.extCalib || eq.extSched || eq.intCalib || eq.intSched, fType, yearVal, monthVal);
-                });
-                let done = 0, total = 0;
-                eqs.forEach(eq => {
-                    const st = getCalibStatus(eq);
-                    if (st !== "NO CALIB SCHED") total++;
-                    if (st === "DONE") done++;
-                });
-                const pct = total ? ((done / total) * 100).toFixed(1) : "0.0";
-                return `
-                    <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-4">
-                        <div class="flex items-center justify-between gap-3">
-                            <div>
-                                <div class="text-xs font-black text-white">${esc(plantLabel(plant))}</div>
-                                <div class="text-[10px] text-slate-500 mt-0.5">DONE / Total completion</div>
-                            </div>
-                            <div class="text-2xl font-black text-emerald-400">${pct}%</div>
-                        </div>
-                        <div class="mt-3 h-2 bg-slate-800 rounded-full overflow-hidden">
-                            <div class="h-full bg-emerald-500 rounded-full" style="width:${pct}%"></div>
-                        </div>
-                        <div class="text-[10px] text-slate-500 mt-2">${done} DONE / ${total} total</div>
-                    </div>`;
-            }).join("");
+            const scheduledTotal = Math.max(0, filteredEq.length - cNa);
+            const donePct = scheduledTotal ? ((cDone / scheduledTotal) * 100).toFixed(1) : '0.0';
+            calibSupp.innerHTML = `
+                <div class="space-y-1">
+                    <div class="flex items-center justify-between text-xs py-1.5 border-b border-slate-700/40">
+                        <span>DONE</span><strong class="text-emerald-400">${cDone} / ${scheduledTotal} (${donePct}%)</strong>
+                    </div>
+                    <div class="flex items-center justify-between text-xs py-1.5">
+                        <span>Scheduled Instruments</span><strong class="text-slate-300">${scheduledTotal}</strong>
+                    </div>
+                </div>`;
+
+            let pInProgress = 0, pPlanning = 0, pCompleted = 0;
+            filteredPr.forEach(pr => {
+                if (pr.status === "In Progress") pInProgress++;
+                else if (pr.status === "Planning") pPlanning++;
+                else if (pr.status === "Completed") pCompleted++;
+            });
 
             const projSupp = document.getElementById("summary-per-plant-projects");
-            projSupp.innerHTML = visiblePlants.map(plant => {
-                const prs = projectsList.filter(pr => {
-                    if (pr.plant !== plant) return false;
-                    return checkDateMatchFilter(pr.date, fType, yearVal, monthVal);
-                });
-                const completed = prs.filter(pr => pr.status === "Completed");
-                const planning = prs.filter(pr => pr.status === "Planning");
-                const inProgress = prs.filter(pr => pr.status === "In Progress");
-                const pct = prs.length ? ((completed.length / prs.length) * 100).toFixed(1) : "0.0";
-                const list = (title, items, cls) => `
-                    <div class="mt-3">
-                        <div class="text-[10px] font-bold uppercase tracking-wider ${cls} mb-1">${title} (${items.length})</div>
-                        ${items.length ? `<div class="space-y-1">${items.map(pr => `<div class="text-[10px] text-slate-300 pl-2 border-l border-slate-700">${esc(pr.title)}</div>`).join("")}</div>` : `<div class="text-[10px] text-slate-600 italic">None</div>`}
-                    </div>`;
-                return `
-                    <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-4">
-                        <div class="flex items-center justify-between gap-3">
-                            <div class="text-xs font-black text-white">${esc(plantLabel(plant))}</div>
-                            <div class="text-2xl font-black text-blue-400">${pct}%</div>
-                        </div>
-                        <div class="text-[10px] text-slate-500 mt-0.5">Project completion: Completed / Total</div>
-                        ${list("Completed", completed, "text-emerald-400")}
-                        ${list("In Progress", inProgress, "text-blue-400")}
-                        ${list("Planning", planning, "text-amber-400")}
-                    </div>`;
-            }).join("");
+            projSupp.innerHTML = `
+                <div class="flex justify-between text-xs py-1 border-b border-slate-700/40"><span>In Progress:</span><strong class="text-blue-400">${pInProgress}</strong></div>
+                <div class="flex justify-between text-xs py-1 border-b border-slate-700/40"><span>Planning:</span><strong class="text-amber-400">${pPlanning}</strong></div>
+                <div class="flex justify-between text-xs py-1"><span>Completed:</span><strong class="text-emerald-400">${pCompleted}</strong></div>
+            `;
 
-            const reliability = document.getElementById("summary-per-plant-reports");
-            reliability.innerHTML = visiblePlants.map(plant => {
-                const logs = downtimeLogs.filter(dt => {
-                    if (dt.plant !== plant) return false;
-                    return checkDateMatchFilter(dt.start, fType, yearVal, monthVal);
-                });
-                let hours = 0;
-                const map = {};
-                logs.forEach(dt => {
-                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
-                    hours += dur;
-                    const key = `${dt.code} - ${dt.equipment} (${dt.line})`;
-                    if (!map[key]) map[key] = {name:key, indication:dt.category, count:0, duration:0};
-                    map[key].count++;
-                    map[key].duration += dur;
-                });
-                const mtbfPlant = logs.length ? (720 / logs.length).toFixed(1) : "0.0";
-                const mttrPlant = logs.length ? Math.round((hours / logs.length) * 60) : 0;
-                const sorted = Object.values(map).sort((a,b) => b.duration - a.duration).slice(0,5);
-                return `
-                    <div class="bg-slate-900/50 border border-slate-700/50 rounded-xl p-4">
-                        <div class="flex items-center justify-between mb-3">
-                            <h5 class="text-xs font-black text-white uppercase tracking-wider">${esc(plantLabel(plant))}</h5>
-                            <span class="text-[10px] text-slate-500">${logs.length} downtime incident${logs.length === 1 ? "" : "s"}</span>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                            <div class="bg-slate-800/70 rounded-lg p-3"><div class="text-[9px] text-slate-500 uppercase font-bold">Total Downtime</div><div class="text-lg font-black text-red-400">${hours.toFixed(1)} hrs</div></div>
-                            <div class="bg-slate-800/70 rounded-lg p-3"><div class="text-[9px] text-slate-500 uppercase font-bold">MTBF</div><div class="text-lg font-black text-blue-400">${mtbfPlant} hrs</div></div>
-                            <div class="bg-slate-800/70 rounded-lg p-3"><div class="text-[9px] text-slate-500 uppercase font-bold">MTTR</div><div class="text-lg font-black text-amber-400">${mttrPlant} mins</div></div>
-                        </div>
-                        <div class="overflow-x-auto rounded-lg border border-slate-700/50">
-                            <table class="w-full text-left text-xs text-slate-300">
-                                <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider"><tr>
-                                    <th class="py-2 px-2 text-center">Rank</th><th class="py-2 px-2">Equipment / Line</th><th class="py-2 px-2 text-center">Indication</th><th class="py-2 px-2 text-center">Incidents</th><th class="py-2 px-2 text-right">Hours</th><th class="py-2 px-2 text-right">% Downtime</th>
-                                </tr></thead>
-                                <tbody class="divide-y divide-slate-700/40">${sorted.length ? sorted.map((item,i) => {
-                                    const pct = hours ? ((item.duration / hours) * 100).toFixed(1) : "0.0";
-                                    return `<tr><td class="py-2 px-2 text-center text-slate-500">#${i+1}</td><td class="py-2 px-2 font-semibold text-white">${esc(item.name)}</td><td class="py-2 px-2 text-center">${esc(item.indication)}</td><td class="py-2 px-2 text-center">${item.count}</td><td class="py-2 px-2 text-right font-bold text-red-400">${item.duration.toFixed(1)}</td><td class="py-2 px-2 text-right font-bold">${pct}%</td></tr>`;
-                                }).join("") : `<tr><td colspan="6" class="py-4 text-center text-slate-600 italic">No downtime records for this plant and period.</td></tr>`}</tbody>
-                            </table>
-                        </div>
-                    </div>`;
-            }).join("");
-
-            
-// Render summary charts
-            renderSummaryCharts(cDone, cOverdue, cOverdueDone, cPending, cStsok, cNa, pInProgress, pPlanning, pCompleted, sortedDtItems);
+            // Render summary charts
+            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pCompleted, sortedDtItems);
         }
 
-        function renderSummaryCharts(cDone, cOverdue, cOverdueDone, cPending, cStsok, cNa, pInProgress, pPlanning, pCompleted, sortedDtItems) {
+        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pCompleted, sortedDtItems) {
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
             if (!calibCanvas || !projCanvas || !paretoCanvas || typeof Chart === 'undefined') return;
 
+            // 1) Calibration completion — no overdue categories.
+            const ctxCalib = calibCanvas.getContext('2d');
             if (chartSummaryCalib) chartSummaryCalib.destroy();
-            if (chartSummaryProjects) chartSummaryProjects.destroy();
-            if (chartSummaryPareto) chartSummaryPareto.destroy();
-
-            // CALIBRATION: show only statuses that actually have records.
-            const calibRaw = [
-                ['DONE', cDone, '#22c55e'],
-                ['OVERDUE, DONE', cOverdueDone, '#f97316'],
-                ['OVERDUE', cOverdue, '#ef4444'],
-                ['PENDING', cPending, '#eab308'],
-                ['STSOK', cStsok, '#3b82f6'],
-                ['NO SCHED', cNa, '#64748b']
-            ];
-            const calibRows = calibRaw.filter(x => Number(x[1]) > 0);
-            const calibLabels = calibRows.length ? calibRows.map(x => x[0]) : ['No calibration data'];
-            const calibData = calibRows.length ? calibRows.map(x => Number(x[1])) : [1];
-            const calibColors = calibRows.length ? calibRows.map(x => x[2]) : ['#334155'];
-
-            chartSummaryCalib = new Chart(calibCanvas.getContext('2d'), {
+            chartSummaryCalib = new Chart(ctxCalib, {
                 type: 'doughnut',
-                data: { labels: calibLabels, datasets: [{ data: calibData, backgroundColor: calibColors, borderWidth: 2, borderColor: '#0f172a', hoverOffset: 5 }] },
-                options: {
-                    responsive: true, maintainAspectRatio: false, cutout: '62%',
-                    plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 10, padding: 10, font: { size: 10 }, color: '#94a3b8' } },
-                        tooltip: { callbacks: { label: function(ctx) { const total = ctx.dataset.data.reduce((a,b)=>a+b,0); const n = Number(ctx.raw || 0); const pct = calibRows.length && total ? ((n/total)*100).toFixed(1) : '0.0'; return calibRows.length ? `${ctx.label}: ${n} (${pct}%)` : 'No calibration data'; } } }
-                    }
-                }
-            });
-
-            // PROJECTS: fixed integer axis and values ordered by workflow status.
-            const projectData = [Number(pCompleted)||0, Number(pInProgress)||0, Number(pPlanning)||0];
-            const maxProject = Math.max(1, ...projectData);
-            chartSummaryProjects = new Chart(projCanvas.getContext('2d'), {
-                type: 'bar',
                 data: {
-                    labels: ['Completed', 'In Progress', 'Planning'],
-                    datasets: [{ label: 'Projects', data: projectData, backgroundColor: ['#22c55e','#3b82f6','#eab308'], borderRadius: 7, maxBarThickness: 42 }]
+                    labels: ['DONE', 'REMAINING'],
+                    datasets: [{
+                        data: [cDone, cRemaining],
+                        backgroundColor: ['#22c55e', '#334155'],
+                        borderWidth: 0
+                    }]
                 },
                 options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.raw} project${Number(ctx.raw) === 1 ? '' : 's'}` } } },
-                    scales: {
-                        x: { ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { beginAtZero: true, suggestedMax: maxProject + 1, ticks: { color: '#94a3b8', precision: 0, stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.4)' } }
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '68%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
+                        tooltip: { callbacks: {
+                            label: function(ctx) {
+                                const total = ctx.dataset.data.reduce((a,b) => a + b, 0);
+                                const n = ctx.raw || 0;
+                                const pct = total ? ((n / total) * 100).toFixed(1) : '0.0';
+                                return `${ctx.label}: ${n} (${pct}%)`;
+                            }
+                        }}
                     }
                 }
             });
 
-            // DOWNTIME: horizontal bars keep long equipment/line names readable.
-            const pareto = (sortedDtItems || []).filter(x => Number(x.duration) > 0).slice(0, 5);
-            const paretoLabels = pareto.length ? pareto.map(x => x.name) : ['No downtime records'];
-            const paretoData = pareto.length ? pareto.map(x => Number(x.duration.toFixed(2))) : [0];
-            chartSummaryPareto = new Chart(paretoCanvas.getContext('2d'), {
+            // 2) Project status
+            const ctxProj = projCanvas.getContext('2d');
+            if (chartSummaryProjects) chartSummaryProjects.destroy();
+            chartSummaryProjects = new Chart(ctxProj, {
                 type: 'bar',
-                data: { labels: paretoLabels, datasets: [{ label: 'Downtime (hrs)', data: paretoData, backgroundColor: '#ef4444', borderRadius: 6, maxBarThickness: 28 }] },
+                data: {
+                    labels: ['In Progress', 'Planning', 'Completed'],
+                    datasets: [{
+                        label: 'Projects',
+                        data: [pInProgress, pPlanning, pCompleted],
+                        backgroundColor: ['#3b82f6', '#eab308', '#22c55e'],
+                        borderRadius: 5,
+                        maxBarThickness: 34
+                    }]
+                },
                 options: {
-                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${Number(ctx.raw).toFixed(1)} hrs` } } },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
                     scales: {
-                        x: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(51,65,85,0.4)' }, title: { display: true, text: 'Hours', color: '#94a3b8', font: { size: 10 } } },
-                        y: { ticks: { color: '#cbd5e1', font: { size: 9 } }, grid: { display: false } }
+                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51, 65, 85, 0.35)' } }
+                    }
+                }
+            });
+
+            // 3) Top downtime
+            const ctxPareto = paretoCanvas.getContext('2d');
+            if (chartSummaryPareto) chartSummaryPareto.destroy();
+            const topItems = sortedDtItems.slice(0, 5);
+            chartSummaryPareto = new Chart(ctxPareto, {
+                type: 'bar',
+                data: {
+                    labels: topItems.length ? topItems.map(i => i.name.length > 18 ? i.name.slice(0,18) + '…' : i.name) : ['No Data'],
+                    datasets: [{
+                        label: 'Hours',
+                        data: topItems.length ? topItems.map(i => Number(i.duration.toFixed(1))) : [0],
+                        backgroundColor: '#f59e0b',
+                        borderRadius: 4,
+                        maxBarThickness: 22
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: {
+                        label: ctx => `${Number(ctx.raw || 0).toFixed(1)} hrs`
+                    }}},
+                    scales: {
+                        x: { beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.35)' } },
+                        y: { ticks: { font: { size: 8 }, color: '#94a3b8' }, grid: { display: false } }
                     }
                 }
             });
@@ -2875,35 +2918,44 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         function renderCalibGauges() {
             const filtered = equipmentList.filter(eq => currentPlant === "ALL" || eq.plant === currentPlant);
-            let extActive = 0, extDone = 0, intActive = 0, intDone = 0;
+
+            let extActive = 0, extDone = 0;
+            let intActive = 0, intDone = 0;
 
             filtered.forEach(eq => {
-                const extStatus = getSubCalibStatus(eq.extSched, eq.extCalib);
-                const intStatus = getSubCalibStatus(eq.intSched, eq.intCalib);
                 if (eq.extSched) {
                     extActive++;
-                    if (extStatus === "DONE" || extStatus === "OVERDUE, DONE") extDone++;
+                    if (eq.extCalib) extDone++;
                 }
                 if (eq.intSched) {
                     intActive++;
-                    if (intStatus === "DONE" || intStatus === "OVERDUE, DONE") intDone++;
+                    if (eq.intCalib) intDone++;
                 }
             });
 
-            const extPct = extActive ? Math.round((extDone / extActive) * 100) : 0;
-            const intPct = intActive ? Math.round((intDone / intActive) * 100) : 0;
+            const extPct = extActive > 0 ? Math.round((extDone / extActive) * 100) : 0;
+            const intPct = intActive > 0 ? Math.round((intDone / intActive) * 100) : 0;
+
             document.getElementById("ext-percent-text").innerText = `${extPct}%`;
             document.getElementById("ext-active-num").innerText = extActive;
             document.getElementById("ext-done-num").innerText = extDone;
+
             document.getElementById("int-percent-text").innerText = `${intPct}%`;
             document.getElementById("int-active-num").innerText = intActive;
             document.getElementById("int-done-num").innerText = intDone;
 
+            // Render Doughnut Gauges
             const ctxExt = document.getElementById('gauge-ext-calib').getContext('2d');
             if (gaugeExt) gaugeExt.destroy();
             gaugeExt = new Chart(ctxExt, {
                 type: 'doughnut',
-                data: { labels: ['Completed', 'Remaining'], datasets: [{ data: [extDone, Math.max(0, extActive - extDone)], backgroundColor: ['#3b82f6', '#334155'], borderWidth: 0 }] },
+                data: {
+                    datasets: [{
+                        data: [extDone, Math.max(0, extActive - extDone)],
+                        backgroundColor: ['#3b82f6', '#334155'],
+                        borderWidth: 0
+                    }]
+                },
                 options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } }
             });
 
@@ -2911,7 +2963,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (gaugeInt) gaugeInt.destroy();
             gaugeInt = new Chart(ctxInt, {
                 type: 'doughnut',
-                data: { labels: ['Completed', 'Remaining'], datasets: [{ data: [intDone, Math.max(0, intActive - intDone)], backgroundColor: ['#a855f7', '#334155'], borderWidth: 0 }] },
+                data: {
+                    datasets: [{
+                        data: [intDone, Math.max(0, intActive - intDone)],
+                        backgroundColor: ['#a855f7', '#334155'],
+                        borderWidth: 0
+                    }]
+                },
                 options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } }
             });
         }
@@ -3431,31 +3489,37 @@ document.addEventListener("DOMContentLoaded", async () => {
             const dtMap = {};
             primaryLogs.forEach(dt => {
                 const key = `${dt.code} - ${dt.equipment} (${dt.line})`;
-                const s = new Date(dt.start), e = new Date(dt.end);
-                const dur = Math.max(0, (e - s) / 3600000);
+                const s = new Date(dt.start);
+                const e = new Date(dt.end);
+                const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
                 if (!dtMap[key]) dtMap[key] = 0;
                 dtMap[key] += dur;
             });
-            const sortedPareto = Object.entries(dtMap).filter(x => x[1] > 0).sort((a,b) => b[1] - a[1]).slice(0, 8);
-            const dtCanvas = document.getElementById('chart-downtime-pareto');
-            if (dtCanvas && typeof Chart !== 'undefined') {
-                if (chartDowntimePareto) chartDowntimePareto.destroy();
-                chartDowntimePareto = new Chart(dtCanvas.getContext('2d'), {
-                    type: 'bar',
-                    data: {
-                        labels: sortedPareto.length ? sortedPareto.map(i => i[0]) : ['No Incidents'],
-                        datasets: [{ label: 'Duration (hrs)', data: sortedPareto.length ? sortedPareto.map(i => Number(i[1].toFixed(2))) : [0], backgroundColor: '#ef4444', borderRadius: 6, maxBarThickness: 30 }]
-                    },
-                    options: {
-                        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${Number(ctx.raw).toFixed(1)} hrs` } } },
-                        scales: {
-                            x: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(51,65,85,0.4)' }, title: { display: true, text: 'Hours', color: '#94a3b8', font: { size: 10 } } },
-                            y: { ticks: { color: '#cbd5e1', font: { size: 9 } }, grid: { display: false } }
-                        }
+            const sortedPareto = Object.entries(dtMap).sort((a,b) => b[1] - a[1]).slice(0, 5);
+
+            const ctxDowntimePareto = document.getElementById('chart-downtime-pareto').getContext('2d');
+            if (chartDowntimePareto) chartDowntimePareto.destroy();
+            chartDowntimePareto = new Chart(ctxDowntimePareto, {
+                type: 'bar',
+                data: {
+                    labels: sortedPareto.length ? sortedPareto.map(i => i[0].substring(0, 18) + '...') : ['No Incidents'],
+                    datasets: [{
+                        label: 'Duration (hrs)',
+                        data: sortedPareto.length ? sortedPareto.map(i => i[1]) : [0],
+                        backgroundColor: '#ef4444',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
+                        y: { ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.4)' } }
                     }
-                });
-            }
+                }
+            });
         }
 
         function handleDowntimeSubmit(e) {
@@ -3742,7 +3806,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const tm = getTimelineMetrics(pr);
                     const computed = tm.timelineProgress == null ? pr.progress : tm.timelineProgress;
                     const card = document.createElement("div");
-                    card.className = "bg-slate-800/90 border border-slate-700/60 p-5 rounded-2xl flex flex-col justify-between space-y-4 shadow-lg";
+                    card.className = "bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between space-y-4 shadow-lg";
                     card.innerHTML = `
                         <div class="space-y-2">
                             <div class="flex items-start justify-between gap-2">
@@ -3766,16 +3830,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const millMap = { "Plant 1": 0, "Plant 2": 0, "PreMix": 0 };
             filtered.forEach(pr => { if (millMap[pr.plant] !== undefined) millMap[pr.plant] += 1; });
-            const millCanvas = document.getElementById('chart-projects-mill');
-            if (millCanvas && typeof Chart !== 'undefined') {
-                if (chartProjectsMill) chartProjectsMill.destroy();
-                const millData = [millMap["Plant 1"], millMap["Plant 2"], millMap["PreMix"]];
-                chartProjectsMill = new Chart(millCanvas.getContext('2d'), {
-                    type: 'bar',
-                    data: { labels: ['Plant 1', 'Plant 2', 'PreMix Plant'], datasets: [{ label: 'Projects', data: millData, backgroundColor: ['#0284c7', '#0369a1', '#075985'], borderRadius: 8, maxBarThickness: 48 }] },
-                    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${ctx.raw} project${Number(ctx.raw)===1?'':'s'}`}}}, scales:{x:{beginAtZero:true,ticks:{color:'#94a3b8',precision:0,stepSize:1},grid:{color:'rgba(51,65,85,0.4)'},title:{display:true,text:'Project count',color:'#94a3b8',font:{size:10}}},y:{ticks:{color:'#cbd5e1',font:{size:10}},grid:{display:false}}} }
-                });
-            }
+            const ctxMill = document.getElementById('chart-projects-mill').getContext('2d');
+            if (chartProjectsMill) chartProjectsMill.destroy();
+            chartProjectsMill = new Chart(ctxMill, {
+                type: 'bar', data: { labels: ['Plant 1', 'Plant 2', 'PreMix Plant'], datasets: [{ label: 'Active Projects', data: [millMap["Plant 1"], millMap["Plant 2"], millMap["PreMix"]], backgroundColor: ['#0284c7', '#0369a1', '#075985'], borderRadius: 8 }] },
+                options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{font:{size:10},color:'#94a3b8'},grid:{display:false}},y:{ticks:{font:{size:10},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,0.4)'}}} }
+            });
         }
 
         function openProjectModal() {
