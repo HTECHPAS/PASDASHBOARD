@@ -55,7 +55,7 @@ window.CloudAuth = (() => {
         if (!client || !userId) return null;
         const { data, error } = await client
             .from("profiles")
-            .select("id,email,username,role,is_main")
+            .select("id,email,username,role,is_main,access_pages")
             .eq("id", userId)
             .maybeSingle();
         if (error) {
@@ -146,7 +146,7 @@ window.CloudAuth = (() => {
         profile = null;
     }
 
-    async function createUser(username, password, role) {
+    async function createUser(username, password, role, accessPages) {
         if (!client) return { ok:false, error:"Cloud authentication is not configured." };
         const current = await client.auth.getUser();
         if (!current?.data?.user) return { ok:false, error:"Main Account session required." };
@@ -170,10 +170,15 @@ window.CloudAuth = (() => {
             return { ok:false, error:"Password must be at least 6 characters." };
         }
 
+        const normalizedRole = role === "admin" ? "admin" : "viewer";
+        const pages = normalizedRole === "admin"
+            ? ["summary", "calibration", "uptime", "calendar", "projects"]
+            : (Array.isArray(accessPages) && accessPages.length ? accessPages : ["summary", "projects"]);
         const result = await callEdge("create", {
             username: cleanUsername,
             password,
-            role: role === "admin" ? "admin" : "viewer"
+            role: normalizedRole,
+            access_pages: pages
         });
         if (result.ok) profile = adminProfile;
         return result.ok ? { ...result, username:cleanUsername } : result;
@@ -193,13 +198,50 @@ window.CloudAuth = (() => {
         });
     }
 
-    async function listUsers() {
-        if (!client) return [];
+    async function updateUser(userId, username, password, role, accessPages) {
+        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
         const current = await client.auth.getUser();
-        if (!current?.data?.user) return [];
+        if (!current?.data?.user) return { ok:false, error:"Main Account session required." };
         const me = await getProfile(current.data.user.id);
-        if (me?.role !== "admin" || me?.is_main !== true) return [];
-        const result = await callEdge("list");
+        if (me?.role !== "admin" || me?.is_main !== true) return { ok:false, error:"Only the Main Account can manage users." };
+        const normalizedRole = role === "admin" ? "admin" : "viewer";
+        const pages = normalizedRole === "admin"
+            ? ["summary", "calibration", "uptime", "calendar", "projects"]
+            : (Array.isArray(accessPages) && accessPages.length ? accessPages : ["summary", "projects"]);
+        return await callEdge("update_user", {
+            user_id: userId, username, password: password || undefined, role: normalizedRole, access_pages: pages
+        });
+    }
+
+    async function updateAccessPages(userId, accessPages) {
+        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
+        const current = await client.auth.getUser();
+        if (!current?.data?.user) return { ok:false, error:"Main Account session required." };
+        const me = await getProfile(current.data.user.id);
+        if (me?.role !== "admin" || me?.is_main !== true) return { ok:false, error:"Only the Main Account can manage users." };
+        return await callEdge("update_access_pages", { user_id: userId, access_pages: accessPages });
+    }
+
+    async function deleteUser(userId) {
+        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
+        const current = await client.auth.getUser();
+        if (!current?.data?.user) return { ok:false, error:"Main Account session required." };
+        const me = await getProfile(current.data.user.id);
+        if (me?.role !== "admin" || me?.is_main !== true) return { ok:false, error:"Only the Main Account can manage users." };
+        return await callEdge("delete_user", { user_id: userId });
+    }
+
+    async function listUsersResult() {
+        if (!client) return { ok:false, users:[], error:"Cloud authentication is not configured." };
+        const current = await client.auth.getUser();
+        if (!current?.data?.user) return { ok:false, users:[], error:"Main Account session required." };
+        const me = await getProfile(current.data.user.id);
+        if (me?.role !== "admin" || me?.is_main !== true) return { ok:false, users:[], error:"Only the Main Account can manage users." };
+        return await callEdge("list");
+    }
+
+    async function listUsers() {
+        const result = await listUsersResult();
         return result.ok ? (result.users || []) : [];
     }
 
@@ -210,7 +252,11 @@ window.CloudAuth = (() => {
         signOut,
         createUser,
         setRole,
+        updateUser,
+        updateAccessPages,
+        deleteUser,
         listUsers,
+        listUsersResult,
         getProfile: () => profile,
         getClient: () => client
     };
@@ -1034,12 +1080,12 @@ window.addEventListener("cloudsync:status", (event) => {
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-2.5 rounded-xl space-y-2 overflow-hidden flex flex-col justify-between">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-chart-bar text-amber-400"></i> Downtime Pareto Analysis
+                            <i class="fa-solid fa-chart-bar text-amber-400"></i> Downtime Pareto by Line Category
                         </h4>
-                        <div class="chart-box-container" style="min-width:0; min-height:145px;">
+                        <div class="chart-box-container">
                             <canvas id="chart-summary-pareto"></canvas>
                         </div>
-                        <p id="summary-pareto-note" class="text-[9px] text-slate-500 text-center">Sorted by downtime hours • cumulative % • 80% threshold</p>
+                        <p class="text-[9px] text-slate-500 text-center">Total downtime hours by Line Category</p>
                     </div>
                 </div>
 
@@ -1063,7 +1109,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 <div class="bg-slate-800/90 border border-slate-700/60 p-2.5 rounded-xl space-y-2 overflow-hidden">
                     <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-clock-rotate-left text-amber-400"></i> System Reliability & Top Equipment / Lines by Downtime
+                            <i class="fa-solid fa-clock-rotate-left text-amber-400"></i> System Reliability & Top Equipment by Line
                         </h4>
                         <span id="summary-dt-area-tag" class="text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">All Area Context</span>
                     </div>
@@ -1091,17 +1137,15 @@ window.addEventListener("cloudsync:status", (event) => {
                             <div id="summary-per-plant-reports" class="space-y-3"></div>
 
                             <div class="space-y-2">
-                                <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment / Lines by Downtime</h5>
+                                <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
                                 <div class="overflow-x-auto rounded-xl border border-slate-700/50">
                                     <table class="w-full text-left text-xs text-slate-300">
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                             <tr>
-                                                <th class="py-1.5 px-2 w-10 text-center">Rank</th>
-                                                <th class="py-1.5 px-2">Equipment / Line Name</th>
-                                                <th class="py-2.5 px-3 text-center">Indication</th>
-                                                <th class="py-2.5 px-3 text-center">Incidents</th>
-                                                <th class="py-2.5 px-3 text-center">Duration</th>
-                                                <th class="py-2.5 px-3 text-right">% Downtime</th>
+                                                <th class="py-1.5 px-2">Line Category</th>
+                                                <th class="py-2.5 px-3">Equipment</th>
+                                                <th class="py-2.5 px-3">Failure Category</th>
+                                                <th class="py-2.5 px-3 text-center">Total Time</th>
                                             </tr>
                                         </thead>
                                         <tbody id="summary-top5-downtime-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
@@ -1167,8 +1211,16 @@ window.addEventListener("cloudsync:status", (event) => {
                         <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">NO SCHED</span>
                         <p id="calib-kpi-na" class="text-2xl font-black text-slate-400 mt-1">0</p>
                     </div>
-                    
-                    
+                    <div class="bg-slate-800/90 border border-blue-500/20 p-4 rounded-2xl">
+                        <span class="text-[10px] text-blue-300 uppercase font-bold tracking-wider">EXT COMPLETED</span>
+                        <p id="calib-kpi-ext-completed" class="text-2xl font-black text-blue-300 mt-1">0</p>
+                        <span class="text-[9px] text-slate-500">DONE + OVERDUE, DONE</span>
+                    </div>
+                    <div class="bg-slate-800/90 border border-purple-500/20 p-4 rounded-2xl">
+                        <span class="text-[10px] text-purple-300 uppercase font-bold tracking-wider">INT COMPLETED</span>
+                        <p id="calib-kpi-int-completed" class="text-2xl font-black text-purple-300 mt-1">0</p>
+                        <span class="text-[9px] text-slate-500">DONE + OVERDUE, DONE</span>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1414,13 +1466,12 @@ window.addEventListener("cloudsync:status", (event) => {
                     <div class="lg:col-span-7 bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between overflow-hidden">
                         <div class="flex items-center justify-between pb-2 border-b border-slate-700/50">
                             <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                                <i class="fa-solid fa-chart-bar text-blue-400"></i> Downtime Pareto Analysis (Equipment & Line with Failure Indication)
+                                <i class="fa-solid fa-chart-bar text-blue-400"></i> Downtime Pareto by Line Category
                             </h3>
                             <span id="dt-chart-plant-label" class="text-xs text-slate-400">All Plants Breakdown</span>
                         </div>
-                        <div class="chart-box-container flex-1 my-2" style="min-width:0; min-height:220px;">
+                        <div class="chart-box-container flex-1 my-2">
                             <canvas id="chart-downtime-pareto"></canvas>
-                        <p id="dt-pareto-threshold-label" class="text-[9px] text-slate-500 text-center mt-1">Pareto: sorted by downtime hours; cumulative line shown against 80% threshold.</p>
                         </div>
                     </div>
                 </div>
@@ -1544,14 +1595,6 @@ window.addEventListener("cloudsync:status", (event) => {
                     <div class="chart-box-container" style="height: 220px !important; max-height: 220px !important;">
                         <canvas id="chart-projects-mill"></canvas>
                     </div>
-                </div>
-
-                <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-3">
-                    <div class="flex items-center justify-between gap-2">
-                        <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-timeline text-cyan-400 mr-1.5"></i> Project Timeline & Schedule Computation</h4>
-                        <span class="text-[10px] text-slate-500">Edit milestones inside each project card</span>
-                    </div>
-                    <div id="projects-timeline-container" class="space-y-4"></div>
                 </div>
 
                 <div id="projects-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
@@ -1708,6 +1751,50 @@ window.addEventListener("cloudsync:status", (event) => {
 
             <div class="pt-2 flex justify-end">
                 <button onclick="closeUserManagementModal()" class="px-4 py-2 rounded-xl bg-slate-700 text-slate-200 text-xs font-semibold">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT CREATED USER MODAL -->
+    <div id="modal-edit-cloud-user" class="fixed inset-0 z-[100] hidden bg-black/70 backdrop-blur-sm items-center justify-center p-4">
+        <div class="w-full max-w-lg bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+                <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-user-pen text-blue-400 mr-2"></i>Edit User Account</h3>
+                <button onclick="closeEditCloudUser()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <input type="hidden" id="edit-cloud-user-id">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Username *</label>
+                    <input id="edit-cloud-user-name" type="text" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">New Password</label>
+                    <input id="edit-cloud-user-pass" type="password" placeholder="Leave blank to keep current" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Access *</label>
+                    <select id="edit-cloud-user-role" onchange="toggleEditUserAuthority()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
+                        <option value="admin">Full Access</option>
+                        <option value="viewer">View Only</option>
+                    </select>
+                </div>
+            </div>
+            <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-2">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-slate-300">View Authority</div>
+                <p class="text-[10px] text-slate-500">For View Only users, select the pages this account can open. Full Access users automatically receive all pages.</p>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="summary"> Executive Summary</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="calibration"> Calibration Tracker</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="uptime"> Uptime / Downtime</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="calendar"> Calib Calendar</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="projects"> Automation Projects</label>
+                </div>
+            </div>
+            <div id="edit-cloud-user-msg" class="hidden text-xs p-2.5 rounded-lg text-center font-medium"></div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="closeEditCloudUser()" class="px-4 py-2 rounded-xl bg-slate-700 text-slate-200 text-xs font-semibold">Cancel</button>
+                <button type="button" onclick="saveEditCloudUser()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold"><i class="fa-solid fa-floppy-disk mr-1"></i>Save Changes</button>
             </div>
         </div>
     </div>
@@ -1885,6 +1972,7 @@ window.addEventListener("cloudsync:status", (event) => {
         let additionalUsers = [];
         let CURRENT_ROLE = "admin";
         let CURRENT_IS_MAIN = false;
+        let CURRENT_ACCESS_PAGES = ["summary", "calibration", "uptime", "calendar", "projects"];
 
         function isAdminUser() {
             return CURRENT_ROLE === "admin";
@@ -1921,6 +2009,30 @@ window.addEventListener("cloudsync:status", (event) => {
             document.querySelectorAll(".action-col, .edit-delete-action, .admin-control").forEach(el => {
                 el.classList.toggle("hidden", !isAdmin);
             });
+            applyPageAuthorityUI();
+        }
+
+        function isPageAllowed(page) {
+            if (isMainAccount() || isAdminUser()) return true;
+            return CURRENT_ACCESS_PAGES.includes(page);
+        }
+
+        function applyPageAuthorityUI() {
+            const pages = ["summary", "calibration", "uptime", "calendar", "projects"];
+            pages.forEach(page => {
+                const btn = document.getElementById(`nav-btn-${page}`);
+                if (btn) btn.classList.toggle("hidden", !isPageAllowed(page));
+            });
+            if (!isPageAllowed(activeModule)) {
+                const fallback = isPageAllowed("summary") ? "summary" : pages.find(isPageAllowed);
+                if (fallback) {
+                    activeModule = fallback;
+                    pages.forEach(page => {
+                        const section = document.getElementById(`module-${page}`);
+                        if (section) section.classList.toggle("hidden", page !== fallback);
+                    });
+                }
+            }
         }
 
         async function cloudAuthEnabled() {
@@ -1951,6 +2063,8 @@ window.addEventListener("cloudsync:status", (event) => {
             const loggedUser = sessionStorage.getItem("logged_user");
             const loggedRole = sessionStorage.getItem("logged_role") || (loggedUser === AUTH_USER ? "admin" : "viewer");
             const loggedIsMain = sessionStorage.getItem("logged_is_main") === "true";
+            try { CURRENT_ACCESS_PAGES = JSON.parse(sessionStorage.getItem("logged_access_pages") || "[]"); } catch (_) { CURRENT_ACCESS_PAGES = []; }
+            if (!Array.isArray(CURRENT_ACCESS_PAGES) || !CURRENT_ACCESS_PAGES.length) CURRENT_ACCESS_PAGES = ["summary", "projects"];
 
             if (isAuth) {
                 CURRENT_ROLE = loggedRole;
@@ -2005,6 +2119,11 @@ window.addEventListener("cloudsync:status", (event) => {
                     sessionStorage.setItem("logged_user", result.profile.email || u);
                     sessionStorage.setItem("logged_role", result.profile.role === "admin" ? "admin" : "viewer");
                     sessionStorage.setItem("logged_is_main", result.profile.is_main ? "true" : "false");
+                    const accessPages = result.profile.role === "admin" || result.profile.is_main
+                        ? ["summary", "calibration", "uptime", "calendar", "projects"]
+                        : (Array.isArray(result.profile.access_pages) && result.profile.access_pages.length ? result.profile.access_pages : ["summary", "projects"]);
+                    sessionStorage.setItem("logged_access_pages", JSON.stringify(accessPages));
+                    CURRENT_ACCESS_PAGES = accessPages;
                     CURRENT_ROLE = result.profile.role === "admin" ? "admin" : "viewer";
                     CURRENT_IS_MAIN = result.profile.is_main === true;
                     err.classList.add("hidden");
@@ -2029,6 +2148,9 @@ window.addEventListener("cloudsync:status", (event) => {
                 sessionStorage.setItem("logged_user", u);
                 sessionStorage.setItem("logged_role", role);
                 sessionStorage.setItem("logged_is_main", u === AUTH_USER ? "true" : "false");
+                const localPages = role === "admin" ? ["summary", "calibration", "uptime", "calendar", "projects"] : (foundSub?.access_pages || ["summary", "projects"]);
+                sessionStorage.setItem("logged_access_pages", JSON.stringify(localPages));
+                CURRENT_ACCESS_PAGES = localPages;
                 CURRENT_ROLE = role;
                 CURRENT_IS_MAIN = u === AUTH_USER;
                 err.classList.add("hidden");
@@ -2045,6 +2167,7 @@ window.addEventListener("cloudsync:status", (event) => {
             sessionStorage.removeItem("logged_user");
             sessionStorage.removeItem("logged_role");
             sessionStorage.removeItem("logged_is_main");
+            sessionStorage.removeItem("logged_access_pages");
             CURRENT_ROLE = "viewer";
             CURRENT_IS_MAIN = false;
             document.getElementById("login-username").value = "";
@@ -2123,7 +2246,8 @@ window.addEventListener("cloudsync:status", (event) => {
 
             if (await cloudAuthEnabled()) {
                 if (username.includes("@")) { alert("Additional users use a username only. Do not enter an email address."); return; }
-                const result = await window.CloudAuth.createUser(username, upass, role);
+                const defaultPages = role === "admin" ? ["summary", "calibration", "uptime", "calendar", "projects"] : ["summary", "projects"];
+                const result = await window.CloudAuth.createUser(username, upass, role, defaultPages);
                 if (!result.ok) { alert(result.error || "Unable to create user."); return; }
                 document.getElementById("new-user-name").value = "";
                 document.getElementById("new-user-pass").value = "";
@@ -2150,24 +2274,33 @@ window.addEventListener("cloudsync:status", (event) => {
             container.innerHTML = "";
 
             if (await cloudAuthEnabled()) {
-                const users = await window.CloudAuth.listUsers();
+                const result = await window.CloudAuth.listUsersResult();
+                if (!result.ok) {
+                    container.innerHTML = `<p class="text-[11px] text-red-400">Unable to load users: ${escapeHtml(result.error || "Unknown error")}</p>`;
+                    return;
+                }
+                const users = result.users || [];
                 if (!users.length) {
                     container.innerHTML = `<p class="text-[11px] text-slate-500 italic">No cloud user accounts added yet.</p>`;
                     return;
                 }
-                const me = sessionStorage.getItem("logged_user") || "";
                 users.forEach((usr) => {
-                    if (!usr || usr.email === me || usr.is_main) return;
+                    if (!usr || usr.is_main) return;
                     const isFull = usr.role === "admin";
+                    const pages = Array.isArray(usr.access_pages) && usr.access_pages.length ? usr.access_pages : ["summary", "projects"];
+                    const pageLabels = {summary:"Executive Summary", calibration:"Calibration", uptime:"Uptime / Downtime", calendar:"Calib Calendar", projects:"Automation Projects"};
+                    const authority = isFull ? "All pages" : pages.map(p => pageLabels[p] || p).join(", ");
                     const item = document.createElement("div");
                     item.className = "flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2 rounded-xl text-xs gap-2";
                     item.innerHTML = `
-                        <div class="min-w-0">
+                        <div class="min-w-0 flex-1">
                             <div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.username || "User")}</div>
                             <div class="text-[9px] ${isFull ? "text-emerald-400" : "text-amber-400"} ml-5 font-bold">${isFull ? "Full Access" : "View Only"}</div>
+                            <div class="text-[9px] text-slate-500 ml-5 truncate" title="${escapeHtml(authority)}">${escapeHtml(authority)}</div>
                         </div>
-                        <div class="flex items-center gap-1">
-                            <button type="button" onclick="toggleCloudUserRole('${usr.id}')" class="text-blue-400 hover:text-blue-300 font-semibold px-2 py-0.5" title="Change access"><i class="fa-solid fa-user-shield"></i></button>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button type="button" onclick="openEditCloudUser('${usr.id}')" class="text-blue-400 hover:text-blue-300 font-semibold px-2 py-0.5" title="Edit user"><i class="fa-solid fa-pen-to-square"></i></button>
+                            <button type="button" onclick="deleteCloudUser('${usr.id}')" class="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5" title="Delete user"><i class="fa-solid fa-trash"></i></button>
                         </div>`;
                     container.appendChild(item);
                 });
@@ -2186,6 +2319,66 @@ window.addEventListener("cloudsync:status", (event) => {
                 item.innerHTML = `<div class="min-w-0"><div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.username)}</div><div class="text-[9px] ${isFull ? "text-emerald-400" : "text-amber-400"} ml-5 font-bold">${isFull ? "Full Access" : "View Only"}</div></div><div class="flex items-center gap-1"><button type="button" onclick="toggleSubUserRole(${idx})" class="text-blue-400 hover:text-blue-300 font-semibold px-2 py-0.5" title="Change access"><i class="fa-solid fa-user-shield"></i></button><button type="button" onclick="deleteSubUser(${idx})" class="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5" title="Remove access"><i class="fa-solid fa-trash"></i></button></div>`;
                 container.appendChild(item);
             });
+        }
+
+        async function openEditCloudUser(userId) {
+            if (!isMainAccount()) return;
+            const result = await window.CloudAuth.listUsersResult();
+            if (!result.ok) { alert(result.error || "Unable to load users."); return; }
+            const usr = (result.users || []).find(u => u.id === userId && !u.is_main);
+            if (!usr) { alert("Account not found."); return; }
+            document.getElementById("edit-cloud-user-id").value = usr.id;
+            document.getElementById("edit-cloud-user-name").value = usr.username || "";
+            document.getElementById("edit-cloud-user-pass").value = "";
+            document.getElementById("edit-cloud-user-role").value = usr.role === "admin" ? "admin" : "viewer";
+            document.querySelectorAll(".edit-page-access").forEach(cb => cb.checked = Array.isArray(usr.access_pages) && usr.access_pages.includes(cb.value));
+            toggleEditUserAuthority();
+            document.getElementById("edit-cloud-user-msg").classList.add("hidden");
+            document.getElementById("modal-edit-cloud-user").classList.remove("hidden");
+        }
+
+        function toggleEditUserAuthority() {
+            const full = document.getElementById("edit-cloud-user-role")?.value === "admin";
+            document.querySelectorAll(".edit-page-access").forEach(cb => { cb.disabled = full; if (full) cb.checked = true; });
+        }
+
+        function closeEditCloudUser() {
+            document.getElementById("modal-edit-cloud-user")?.classList.add("hidden");
+        }
+
+        async function saveEditCloudUser() {
+            if (!isMainAccount()) return;
+            const id = document.getElementById("edit-cloud-user-id").value;
+            const username = document.getElementById("edit-cloud-user-name").value.trim();
+            const password = document.getElementById("edit-cloud-user-pass").value;
+            const role = document.getElementById("edit-cloud-user-role").value;
+            const pages = Array.from(document.querySelectorAll(".edit-page-access:checked")).map(cb => cb.value);
+            if (!username) { alert("Username is required."); return; }
+            if (role === "viewer" && pages.length === 0) { alert("Select at least one View Authority page."); return; }
+            const result = await window.CloudAuth.updateUser(id, username, password, role, pages);
+            const msg = document.getElementById("edit-cloud-user-msg");
+            if (!result.ok) {
+                msg.className = "text-xs p-2.5 rounded-lg text-center font-medium bg-red-500/10 border border-red-500/20 text-red-400";
+                msg.textContent = result.error || "Unable to update user.";
+                msg.classList.remove("hidden");
+                return;
+            }
+            closeEditCloudUser();
+            await renderSubUsersList();
+            alert("User account updated successfully.");
+        }
+
+        async function deleteCloudUser(userId) {
+            if (!isMainAccount()) return;
+            const result = await window.CloudAuth.listUsersResult();
+            if (!result.ok) { alert(result.error || "Unable to load users."); return; }
+            const usr = (result.users || []).find(u => u.id === userId && !u.is_main);
+            if (!usr) return;
+            if (!confirm(`Delete user "${usr.username}"? This cannot be undone.`)) return;
+            const del = await window.CloudAuth.deleteUser(userId);
+            if (!del.ok) { alert(del.error || "Unable to delete user."); return; }
+            await renderSubUsersList();
+            alert("User account deleted successfully.");
         }
 
         async function toggleCloudUserRole(userId) {
@@ -2292,6 +2485,7 @@ window.addEventListener("cloudsync:status", (event) => {
             sessionStorage.removeItem("logged_user");
             sessionStorage.removeItem("logged_role");
             sessionStorage.removeItem("logged_is_main");
+            sessionStorage.removeItem("logged_access_pages");
             CURRENT_ROLE = "viewer";
             CURRENT_IS_MAIN = false;
             loadSavedUsers();
@@ -2662,6 +2856,11 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function switchModule(mod) {
+            if (!isPageAllowed(mod)) {
+                const fallback = isPageAllowed("summary") ? "summary" : ["summary","calibration","uptime","calendar","projects"].find(isPageAllowed);
+                if (fallback && fallback !== mod) return switchModule(fallback);
+                return;
+            }
             activeModule = mod;
             const modules = ['summary', 'calibration', 'uptime', 'calendar', 'projects'];
             modules.forEach(m => {
@@ -2880,38 +3079,50 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("summary-dt-mtbf").innerText = `${mtbf} hrs`;
             document.getElementById("summary-dt-mttr").innerText = `${mttr} mins`;
 
-            // Top Equipment / Lines by Downtime Table
-            const dtMap = {};
+            // Pareto = total downtime by Line Category. Repeated records for the same line are added together.
+            const lineMap = {};
             filteredDt.forEach(dt => {
-                const key = `${dt.code} - ${dt.equipment} (${dt.line})`;
+                const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
                 const s = new Date(dt.start);
                 const e = new Date(dt.end);
                 const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
-                if (!dtMap[key]) {
-                    dtMap[key] = { name: key, indication: dt.category, count: 0, duration: 0 };
-                }
-                dtMap[key].count += 1;
-                dtMap[key].duration += dur;
+                if (!lineMap[line]) lineMap[line] = { line, duration: 0, count: 0 };
+                lineMap[line].duration += dur;
+                lineMap[line].count += 1;
             });
+            const sortedLinePareto = Object.values(lineMap).sort((a,b) => b.duration - a.duration);
 
-            const sortedDtItems = Object.values(dtMap).sort((a,b) => b.duration - a.duration);
+            // Top Equipment = ONE row per Line Category. Aggregate by Equipment + Failure Category and keep only the highest total downtime for each line.
+            const lineEquipmentMap = {};
+            filteredDt.forEach(dt => {
+                const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+                const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+                const s = new Date(dt.start);
+                const e = new Date(dt.end);
+                const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
+                if (!lineEquipmentMap[line]) lineEquipmentMap[line] = {};
+                const key = `${equipment}|||${category}`;
+                if (!lineEquipmentMap[line][key]) lineEquipmentMap[line][key] = { line, equipment, category, duration: 0 };
+                lineEquipmentMap[line][key].duration += dur;
+            });
+            const topEquipmentByLine = Object.values(lineEquipmentMap).map(group =>
+                Object.values(group).sort((a,b) => b.duration - a.duration)[0]
+            ).filter(Boolean).sort((a,b) => b.duration - a.duration);
+
             const top5Body = document.getElementById("summary-top5-downtime-body");
             top5Body.innerHTML = "";
-
-            if (sortedDtItems.length === 0) {
-                top5Body.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-slate-500 italic">No downtime records found for this period.</td></tr>`;
+            if (topEquipmentByLine.length === 0) {
+                top5Body.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-slate-500 italic">No downtime records found for this period.</td></tr>`;
             } else {
-                sortedDtItems.slice(0, 5).forEach((item, idx) => {
-                    const pct = totalDtHours > 0 ? ((item.duration / totalDtHours) * 100).toFixed(1) : 0;
+                topEquipmentByLine.forEach(item => {
                     const tr = document.createElement("tr");
                     tr.className = "hover:bg-slate-800/50 transition";
                     tr.innerHTML = `
-                        <td class="py-2.5 px-3 text-center font-bold text-slate-400">#${idx + 1}</td>
-                        <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(item.name)}</td>
-                        <td class="py-2.5 px-3 text-center"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.indication)}</span></td>
-                        <td class="py-2.5 px-3 text-center text-slate-300">${item.count}</td>
+                        <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(item.line)}</td>
+                        <td class="py-2.5 px-3 text-slate-200">${escapeHtml(item.equipment)}</td>
+                        <td class="py-2.5 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category)}</span></td>
                         <td class="py-2.5 px-3 text-center text-red-400 font-bold">${item.duration.toFixed(1)} hrs</td>
-                        <td class="py-2.5 px-3 text-right font-bold text-slate-200">${pct}%</td>
                     `;
                     top5Body.appendChild(tr);
                 });
@@ -2946,78 +3157,16 @@ window.addEventListener("cloudsync:status", (event) => {
             `;
 
             // Render summary charts
-            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pCompleted, sortedDtItems);
+            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pCompleted, sortedLinePareto);
         }
 
-        // --- REAL PARETO COMPUTATION ---
-        // Pareto is calculated from all filtered downtime records:
-        // 1) aggregate downtime duration by equipment + line,
-        // 2) sort descending by total downtime hours,
-        // 3) calculate each cause's share of total downtime,
-        // 4) calculate cumulative percentage,
-        // 5) identify the first cause crossing the 80% cumulative threshold.
-        function computeDowntimePareto(logs) {
-            const map = {};
-
-            logs.forEach(dt => {
-                const start = new Date(dt.start);
-                const end = new Date(dt.end);
-                const hours = Math.max(0, (end - start) / (1000 * 60 * 60));
-                if (!Number.isFinite(hours) || hours <= 0) return;
-
-                const code = String(dt.code || '').trim();
-                const equipment = String(dt.equipment || '').trim();
-                const line = String(dt.line || '').trim();
-                const key = `${code} - ${equipment} (${line})`;
-
-                if (!map[key]) {
-                    map[key] = {
-                        name: key,
-                        category: String(dt.category || 'Unclassified'),
-                        incidents: 0,
-                        duration: 0
-                    };
-                }
-                map[key].incidents += 1;
-                map[key].duration += hours;
-            });
-
-            const items = Object.values(map)
-                .sort((a, b) => b.duration - a.duration || b.incidents - a.incidents);
-
-            const totalHours = items.reduce((sum, item) => sum + item.duration, 0);
-            let cumulative = 0;
-
-            items.forEach(item => {
-                item.percent = totalHours > 0 ? (item.duration / totalHours) * 100 : 0;
-                cumulative += item.percent;
-                item.cumulativePercent = cumulative;
-            });
-
-            const cutoffIndex = items.findIndex(item => item.cumulativePercent >= 80);
-            const cutoffCount = cutoffIndex >= 0 ? cutoffIndex + 1 : items.length;
-            const cutoffHours = cutoffIndex >= 0 ? items[cutoffIndex].duration : 0;
-
-            return {
-                items,
-                totalHours,
-                cutoffIndex,
-                cutoffCount,
-                cutoffHours
-            };
-        }
-
-        function formatParetoLabel(name, maxLength = 22) {
-            return name.length > maxLength ? `${name.slice(0, maxLength - 1)}…` : name;
-        }
-
-        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pCompleted, sortedDtItems) {
+        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pCompleted, sortedLinePareto) {
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
             if (!calibCanvas || !projCanvas || !paretoCanvas || typeof Chart === 'undefined') return;
 
-            // 1) Calibration completion
+            // 1) Calibration completion — no overdue categories.
             const ctxCalib = calibCanvas.getContext('2d');
             if (chartSummaryCalib) chartSummaryCalib.destroy();
             chartSummaryCalib = new Chart(ctxCalib, {
@@ -3074,144 +3223,39 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             });
 
-            // 3) REAL Pareto:
-            // bars = downtime hours per equipment/line, sorted descending;
-            // line = cumulative percentage of total downtime;
-            // dashed horizontal line = 80% threshold.
+            // 3) Pareto: total downtime by Line Category
             const ctxPareto = paretoCanvas.getContext('2d');
             if (chartSummaryPareto) chartSummaryPareto.destroy();
-
-            // renderSummaryCharts receives aggregated items from renderSummaryModule.
-            // Reconstruct the chart from those already-computed totals while preserving
-            // the exact Pareto ordering/cumulative math.
-            const totalHours = Array.isArray(sortedDtItems)
-                ? sortedDtItems.reduce((sum, item) => sum + Number(item.duration || 0), 0)
-                : 0;
-            let running = 0;
-            const paretoItems = (Array.isArray(sortedDtItems) ? sortedDtItems : [])
-                .slice()
-                .sort((a, b) => Number(b.duration || 0) - Number(a.duration || 0))
-                .map(item => {
-                    const duration = Number(item.duration || 0);
-                    const pct = totalHours > 0 ? (duration / totalHours) * 100 : 0;
-                    running += pct;
-                    return { ...item, duration, percent: pct, cumulativePercent: running };
-                });
-
-            const topSummaryItems = paretoItems.slice(0, 8);
-            const labels = topSummaryItems.length
-                ? topSummaryItems.map(i => formatParetoLabel(i.name, 20))
-                : ['No Data'];
-
-            const barData = topSummaryItems.length
-                ? topSummaryItems.map(i => Number(i.duration.toFixed(2)))
-                : [0];
-
-            const cumulativeData = topSummaryItems.length
-                ? topSummaryItems.map(i => Number(i.cumulativePercent.toFixed(1)))
-                : [0];
-
-            const first80 = paretoItems.findIndex(i => i.cumulativePercent >= 80);
-            const cutoffCount = first80 >= 0 ? first80 + 1 : paretoItems.length;
-            const note = document.getElementById('summary-pareto-note');
-            if (note) {
-                note.textContent = paretoItems.length
-                    ? `${cutoffCount} of ${paretoItems.length} causes reach 80% • ${totalHours.toFixed(1)} total downtime hrs`
-                    : 'No downtime data for the selected period';
-            }
-
+            const lineItems = sortedLinePareto || [];
+            let cumulative = 0;
+            const totalLineHours = lineItems.reduce((sum, i) => sum + Number(i.duration || 0), 0);
+            const cumulativePct = lineItems.map(i => {
+                cumulative += totalLineHours ? (Number(i.duration || 0) / totalLineHours) * 100 : 0;
+                return Number(cumulative.toFixed(1));
+            });
             chartSummaryPareto = new Chart(ctxPareto, {
+                type: 'bar',
                 data: {
-                    labels,
-                    datasets: [
-                        {
-                            type: 'bar',
-                            label: 'Downtime (hrs)',
-                            data: barData,
-                            backgroundColor: '#f59e0b',
-                            borderRadius: 4,
-                            maxBarThickness: 22,
-                            yAxisID: 'y'
-                        },
-                        {
-                            type: 'line',
-                            label: 'Cumulative %',
-                            data: cumulativeData,
-                            borderColor: '#38bdf8',
-                            backgroundColor: '#38bdf8',
-                            borderWidth: 2,
-                            pointRadius: 2,
-                            pointHoverRadius: 4,
-                            tension: 0.15,
-                            yAxisID: 'y1'
-                        },
-                        {
-                            type: 'line',
-                            label: '80% Threshold',
-                            data: labels.map(() => 80),
-                            borderColor: '#ef4444',
-                            borderWidth: 1.5,
-                            borderDash: [5, 4],
-                            pointRadius: 0,
-                            fill: false,
-                            yAxisID: 'y1'
-                        }
-                    ]
+                    labels: lineItems.length ? lineItems.map(i => i.line.length > 18 ? i.line.slice(0,18) + '…' : i.line) : ['No Data'],
+                    datasets: [{
+                        label: 'Downtime (hrs)',
+                        data: lineItems.length ? lineItems.map(i => Number(i.duration.toFixed(1))) : [0],
+                        backgroundColor: '#f59e0b', borderRadius: 4, maxBarThickness: 22, order: 2
+                    }, {
+                        type: 'line', label: 'Cumulative %', data: lineItems.length ? cumulativePct : [0],
+                        borderColor: '#38bdf8', backgroundColor: '#38bdf8', borderWidth: 2,
+                        pointRadius: 2, tension: 0.25, yAxisID: 'y1', order: 1
+                    }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: { boxWidth: 8, padding: 6, font: { size: 8 }, color: '#94a3b8' }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(ctx) {
-                                    if (ctx.dataset.label === 'Cumulative %' || ctx.dataset.label === '80% Threshold') {
-                                        return `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%`;
-                                    }
-                                    const item = paretoItems[ctx.dataIndex];
-                                    return item
-                                        ? `${item.name}: ${item.duration.toFixed(2)} hrs (${item.percent.toFixed(1)}%)`
-                                        : `Downtime: ${Number(ctx.raw || 0).toFixed(2)} hrs`;
-                                },
-                                afterLabel: function(ctx) {
-                                    if (ctx.dataset.label === 'Downtime (hrs)') {
-                                        const item = paretoItems[ctx.dataIndex];
-                                        return item ? `Cumulative: ${item.cumulativePercent.toFixed(1)}%` : '';
-                                    }
-                                    return '';
-                                }
-                            }
-                        }
-                    },
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: {
+                        label: ctx => ctx.dataset.label === 'Cumulative %' ? `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%` : `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)} hrs`
+                    }}},
                     scales: {
-                        x: {
-                            ticks: { font: { size: 7 }, color: '#94a3b8', maxRotation: 45, minRotation: 30 },
-                            grid: { display: false }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            title: { display: true, text: 'Hours', color: '#94a3b8', font: { size: 8 } },
-                            ticks: { font: { size: 8 }, color: '#94a3b8' },
-                            grid: { color: 'rgba(51, 65, 85, 0.35)' }
-                        },
-                        y1: {
-                            beginAtZero: true,
-                            min: 0,
-                            max: 100,
-                            position: 'right',
-                            title: { display: true, text: 'Cumulative %', color: '#94a3b8', font: { size: 8 } },
-                            ticks: {
-                                font: { size: 8 },
-                                color: '#94a3b8',
-                                callback: value => `${value}%`
-                            },
-                            grid: { drawOnChartArea: false }
-                        }
+                        x: { ticks: { font: { size: 8 }, color: '#94a3b8' }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.35)' } },
+                        y1: { beginAtZero: true, min: 0, max: 100, position: 'right', ticks: { font: { size: 8 }, color: '#38bdf8', callback: value => `${value}%` }, grid: { drawOnChartArea: false } }
                     }
                 }
             });
@@ -3329,6 +3373,10 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("calib-kpi-overdue").innerText = tOverdue;
             const overdueDoneEl = document.getElementById("calib-kpi-overdue-done");
             if (overdueDoneEl) overdueDoneEl.innerText = tOverdueDone;
+            const extCompletedEl = document.getElementById("calib-kpi-ext-completed");
+            const intCompletedEl = document.getElementById("calib-kpi-int-completed");
+            if (extCompletedEl) extCompletedEl.innerText = ext.DONE + ext["OVERDUE, DONE"];
+            if (intCompletedEl) intCompletedEl.innerText = int.DONE + int["OVERDUE, DONE"];
             const statusCard = (label, value, cls) => `<div class="bg-slate-800/70 border border-slate-700/50 rounded-lg p-2"><div class="text-[9px] text-slate-500">${label}</div><div class="text-sm font-black ${cls}">${value}</div></div>`;
             const statusOrder = [['DONE','text-emerald-400'],['OVERDUE, DONE','text-orange-400'],['OVERDUE','text-red-400'],['PENDING','text-amber-400'],['STSOK','text-blue-400'],['NA','text-slate-400']];
             document.getElementById('calib-external-breakdown').innerHTML = statusOrder.map(([k,c]) => statusCard(k, ext[k] || 0, c)).join('');
@@ -3350,7 +3398,7 @@ window.addEventListener("cloudsync:status", (event) => {
             tbody.innerHTML = "";
 
             if (groups.size === 0) {
-                tbody.innerHTML = `<tr><td colspan="13" class="text-center py-6 text-slate-500 italic">No equipment entries found matching criteria.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-slate-500 italic">No equipment entries found matching criteria.</td></tr>`;
                 return;
             }
 
@@ -3788,130 +3836,50 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            // Render REAL Downtime Pareto Chart
-            const pareto = computeDowntimePareto(primaryLogs);
-            const sortedPareto = pareto.items;
+            // Render Downtime Pareto Chart — total downtime by Line Category.
+            const lineMap = {};
+            primaryLogs.forEach(dt => {
+                const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+                const s = new Date(dt.start);
+                const e = new Date(dt.end);
+                const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
+                if (!lineMap[line]) lineMap[line] = 0;
+                lineMap[line] += dur;
+            });
+            const sortedPareto = Object.entries(lineMap).sort((a,b) => b[1] - a[1]);
+            let cumulative = 0;
+            const totalParetoHours = sortedPareto.reduce((sum, i) => sum + i[1], 0);
+            const cumulativePct = sortedPareto.map(i => {
+                cumulative += totalParetoHours ? (i[1] / totalParetoHours) * 100 : 0;
+                return Number(cumulative.toFixed(1));
+            });
 
             const ctxDowntimePareto = document.getElementById('chart-downtime-pareto').getContext('2d');
             if (chartDowntimePareto) chartDowntimePareto.destroy();
-
-            const detailedLabels = sortedPareto.length
-                ? sortedPareto.map(i => formatParetoLabel(i.name, 24))
-                : ['No Incidents'];
-
-            const detailedBars = sortedPareto.length
-                ? sortedPareto.map(i => Number(i.duration.toFixed(2)))
-                : [0];
-
-            const detailedCumulative = sortedPareto.length
-                ? sortedPareto.map(i => Number(i.cumulativePercent.toFixed(1)))
-                : [0];
-
-            const thresholdLabel = document.getElementById('dt-pareto-threshold-label');
-            if (thresholdLabel) {
-                thresholdLabel.textContent = sortedPareto.length
-                    ? `80% threshold reached by ${pareto.cutoffCount} of ${sortedPareto.length} equipment/line causes • ${pareto.totalHours.toFixed(1)} total downtime hrs`
-                    : 'No downtime data for the selected period.';
-            }
-
             chartDowntimePareto = new Chart(ctxDowntimePareto, {
+                type: 'bar',
                 data: {
-                    labels: detailedLabels,
-                    datasets: [
-                        {
-                            type: 'bar',
-                            label: 'Downtime (hrs)',
-                            data: detailedBars,
-                            backgroundColor: '#ef4444',
-                            borderRadius: 6,
-                            maxBarThickness: 34,
-                            yAxisID: 'y'
-                        },
-                        {
-                            type: 'line',
-                            label: 'Cumulative %',
-                            data: detailedCumulative,
-                            borderColor: '#38bdf8',
-                            backgroundColor: '#38bdf8',
-                            borderWidth: 2,
-                            pointRadius: 2,
-                            pointHoverRadius: 4,
-                            tension: 0.15,
-                            yAxisID: 'y1'
-                        },
-                        {
-                            type: 'line',
-                            label: '80% Threshold',
-                            data: detailedLabels.map(() => 80),
-                            borderColor: '#f59e0b',
-                            borderWidth: 1.5,
-                            borderDash: [6, 4],
-                            pointRadius: 0,
-                            fill: false,
-                            yAxisID: 'y1'
-                        }
-                    ]
+                    labels: sortedPareto.length ? sortedPareto.map(i => i[0].length > 18 ? i[0].slice(0,18) + '…' : i[0]) : ['No Incidents'],
+                    datasets: [{
+                        label: 'Downtime (hrs)', data: sortedPareto.length ? sortedPareto.map(i => Number(i[1].toFixed(1))) : [0],
+                        backgroundColor: '#ef4444', borderRadius: 6, order: 2
+                    }, {
+                        type: 'line', label: 'Cumulative %', data: sortedPareto.length ? cumulativePct : [0],
+                        borderColor: '#38bdf8', backgroundColor: '#38bdf8', borderWidth: 2,
+                        pointRadius: 3, tension: 0.25, yAxisID: 'y1', order: 1
+                    }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: { boxWidth: 9, padding: 7, font: { size: 8 }, color: '#94a3b8' }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(ctx) {
-                                    if (ctx.dataset.label === 'Cumulative %' || ctx.dataset.label === '80% Threshold') {
-                                        return `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%`;
-                                    }
-                                    const item = sortedPareto[ctx.dataIndex];
-                                    return item
-                                        ? `${item.name}: ${item.duration.toFixed(2)} hrs (${item.percent.toFixed(1)}%)`
-                                        : `Downtime: ${Number(ctx.raw || 0).toFixed(2)} hrs`;
-                                },
-                                afterLabel: function(ctx) {
-                                    if (ctx.dataset.label === 'Downtime (hrs)') {
-                                        const item = sortedPareto[ctx.dataIndex];
-                                        return item
-                                            ? `Incidents: ${item.incidents} • Cumulative: ${item.cumulativePercent.toFixed(1)}%`
-                                            : '';
-                                    }
-                                    return '';
-                                }
-                            }
-                        }
-                    },
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
+                        tooltip: { callbacks: { label: ctx => ctx.dataset.label === 'Cumulative %' ? `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%` : `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)} hrs` } } },
                     scales: {
-                        x: {
-                            ticks: { font: { size: 8 }, color: '#94a3b8', maxRotation: 45, minRotation: 30 },
-                            grid: { display: false }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            title: { display: true, text: 'Downtime Hours', color: '#94a3b8', font: { size: 9 } },
-                            ticks: { font: { size: 9 }, color: '#94a3b8' },
-                            grid: { color: 'rgba(51, 65, 85, 0.4)' }
-                        },
-                        y1: {
-                            beginAtZero: true,
-                            min: 0,
-                            max: 100,
-                            position: 'right',
-                            title: { display: true, text: 'Cumulative %', color: '#94a3b8', font: { size: 9 } },
-                            ticks: {
-                                font: { size: 9 },
-                                color: '#94a3b8',
-                                callback: value => `${value}%`
-                            },
-                            grid: { drawOnChartArea: false }
-                        }
+                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.4)' } },
+                        y1: { beginAtZero: true, min: 0, max: 100, position: 'right', ticks: { font: { size: 9 }, color: '#38bdf8', callback: value => `${value}%` }, grid: { drawOnChartArea: false } }
                     }
                 }
             });
-
         }
 
         function handleDowntimeSubmit(e) {
@@ -4137,9 +4105,20 @@ window.addEventListener("cloudsync:status", (event) => {
             }[status] || 'bg-slate-700/40 text-slate-300 border-slate-600/60';
         }
 
+        function toggleProjectTimeline(id) {
+            const el = document.getElementById(`project-timeline-${id}`);
+            const btn = document.getElementById(`project-view-btn-${id}`);
+            if (!el) return;
+            const hidden = el.classList.toggle('hidden');
+            if (btn) {
+                btn.innerHTML = hidden
+                    ? '<i class="fa-solid fa-eye mr-1"></i> View Timeline'
+                    : '<i class="fa-solid fa-eye-slash mr-1"></i> Hide Timeline';
+            }
+        }
+
         function renderProjectTimeline(pr) {
             const timeline = ensureProjectTimeline(pr).slice().sort((a,b) => String(a.start||'').localeCompare(String(b.start||'')));
-            const m = getTimelineMetrics(pr);
             if (!timeline.length) return `<div class="text-xs text-slate-500 italic">No timeline steps yet. Edit the project to add milestones.</div>`;
             const rows = timeline.map((step, idx) => `
                 <div class="relative pl-7 pb-3">
@@ -4153,19 +4132,16 @@ window.addEventListener("cloudsync:status", (event) => {
                         <span class="text-[9px] font-bold px-2 py-0.5 rounded border ${timelineStatusClass(step.status)}">${escapeHtml(step.status || 'Pending')}</span>
                     </div>
                 </div>`).join('');
+            const m = getTimelineMetrics(pr);
             return `
-                <div class="bg-slate-900/40 border border-slate-700/40 rounded-xl p-4">
-                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-                        <div><h5 class="text-sm font-bold text-white">${escapeHtml(pr.title)}</h5><span class="text-[10px] text-slate-500">${escapeHtml(pr.plant)}</span></div>
-                        <button onclick="editProject(${pr.id})" class="admin-only text-blue-400 hover:text-blue-300 text-xs font-semibold"><i class="fa-solid fa-pen mr-1"></i>Edit Timeline</button>
+                <div class="mt-3 bg-slate-900/50 border border-slate-700/50 rounded-xl p-3">
+                    <div class="flex items-center justify-between gap-2 mb-3">
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">Project Timeline</div>
+                            <div class="text-[10px] text-slate-500">${m.plannedDays ? `${m.plannedDays.toFixed(0)} planned days` : 'Milestones'}</div>
+                        </div>
+                        <button onclick="editProject(${pr.id})" class="admin-only text-blue-400 hover:text-blue-300 text-[10px] font-semibold"><i class="fa-solid fa-pen mr-1"></i>Edit</button>
                     </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-                        <div class="bg-slate-800/70 rounded-lg p-2"><div class="text-[9px] text-slate-500 uppercase">Planned Days</div><div class="text-sm font-bold text-white">${m.plannedDays.toFixed(0)}</div></div>
-                        <div class="bg-slate-800/70 rounded-lg p-2"><div class="text-[9px] text-slate-500 uppercase">Elapsed Plan</div><div class="text-sm font-bold text-cyan-400">${m.timelineProgress ?? 0}%</div></div>
-                        <div class="bg-slate-800/70 rounded-lg p-2"><div class="text-[9px] text-slate-500 uppercase">Milestones Done</div><div class="text-sm font-bold text-emerald-400">${m.completed}/${m.total}</div></div>
-                        <div class="bg-slate-800/70 rounded-lg p-2"><div class="text-[9px] text-slate-500 uppercase">Schedule Variance</div><div class="text-sm font-bold ${m.varianceDays >= 0 ? 'text-emerald-400' : 'text-red-400'}">${m.varianceDays >= 0 ? '+' : ''}${m.varianceDays} pts</div></div>
-                    </div>
-                    <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-4"><div class="h-full bg-cyan-500 rounded-full" style="width:${m.timelineProgress ?? 0}%"></div></div>
                     ${rows}
                 </div>`;
         }
@@ -4181,9 +4157,7 @@ window.addEventListener("cloudsync:status", (event) => {
             });
 
             const container = document.getElementById("projects-container");
-            const timelineContainer = document.getElementById("projects-timeline-container");
             container.innerHTML = "";
-            timelineContainer.innerHTML = filtered.length ? filtered.map(renderProjectTimeline).join('') : `<div class="text-center py-4 text-slate-500 italic">No projects found.</div>`;
 
             if (filtered.length === 0) {
                 container.innerHTML = `<div class="col-span-full text-center py-8 text-slate-500 italic">No automation projects found for the selected year and plant.</div>`;
@@ -4212,6 +4186,10 @@ window.addEventListener("cloudsync:status", (event) => {
                             <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-700"><div class="bg-cyan-500 h-full rounded-full transition-all duration-500" style="width:${computed}%"></div></div>
                         </div>
                         <p class="text-xs text-slate-300 bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">${escapeHtml(pr.notes || 'No milestones logged.')}</p>
+                        <button id="project-view-btn-${pr.id}" type="button" onclick="toggleProjectTimeline(${pr.id})" class="w-full text-left px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/15 text-[11px] font-semibold transition">
+                            <i class="fa-solid fa-eye mr-1"></i> View Timeline
+                        </button>
+                        <div id="project-timeline-${pr.id}" class="hidden">${renderProjectTimeline(pr)}</div>
                         <div class="flex items-center justify-between pt-2 border-t border-slate-700/50 text-xs">
                             <span class="text-slate-400"><i class="fa-solid fa-calendar text-amber-400 mr-1"></i>Target: ${escapeHtml(pr.date)}</span>
                             <div class="flex items-center gap-2"><button onclick="editProject(${pr.id})" class="text-blue-400 hover:text-blue-300 font-semibold"><i class="fa-solid fa-pen"></i></button><button onclick="deleteProject(${pr.id})" class="text-red-400 hover:text-red-300 font-semibold"><i class="fa-solid fa-trash"></i></button></div>
