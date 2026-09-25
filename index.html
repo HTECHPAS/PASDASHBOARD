@@ -1036,10 +1036,10 @@ window.addEventListener("cloudsync:status", (event) => {
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-bar text-amber-400"></i> Downtime Pareto Analysis
                         </h4>
-                        <div class="chart-box-container">
+                        <div class="chart-box-container" style="min-width:0; min-height:145px;">
                             <canvas id="chart-summary-pareto"></canvas>
                         </div>
-                        <p class="text-[9px] text-slate-500 text-center">Downtime hours by equipment / line</p>
+                        <p id="summary-pareto-note" class="text-[9px] text-slate-500 text-center">Sorted by downtime hours • cumulative % • 80% threshold</p>
                     </div>
                 </div>
 
@@ -1167,16 +1167,8 @@ window.addEventListener("cloudsync:status", (event) => {
                         <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">NO SCHED</span>
                         <p id="calib-kpi-na" class="text-2xl font-black text-slate-400 mt-1">0</p>
                     </div>
-                    <div class="bg-slate-800/90 border border-blue-500/20 p-4 rounded-2xl">
-                        <span class="text-[10px] text-blue-300 uppercase font-bold tracking-wider">EXT COMPLETED</span>
-                        <p id="calib-kpi-ext-completed" class="text-2xl font-black text-blue-300 mt-1">0</p>
-                        <span class="text-[9px] text-slate-500">DONE + OVERDUE, DONE</span>
-                    </div>
-                    <div class="bg-slate-800/90 border border-purple-500/20 p-4 rounded-2xl">
-                        <span class="text-[10px] text-purple-300 uppercase font-bold tracking-wider">INT COMPLETED</span>
-                        <p id="calib-kpi-int-completed" class="text-2xl font-black text-purple-300 mt-1">0</p>
-                        <span class="text-[9px] text-slate-500">DONE + OVERDUE, DONE</span>
-                    </div>
+                    
+                    
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1426,8 +1418,9 @@ window.addEventListener("cloudsync:status", (event) => {
                             </h3>
                             <span id="dt-chart-plant-label" class="text-xs text-slate-400">All Plants Breakdown</span>
                         </div>
-                        <div class="chart-box-container flex-1 my-2">
+                        <div class="chart-box-container flex-1 my-2" style="min-width:0; min-height:220px;">
                             <canvas id="chart-downtime-pareto"></canvas>
+                        <p id="dt-pareto-threshold-label" class="text-[9px] text-slate-500 text-center mt-1">Pareto: sorted by downtime hours; cumulative line shown against 80% threshold.</p>
                         </div>
                     </div>
                 </div>
@@ -2956,13 +2949,75 @@ window.addEventListener("cloudsync:status", (event) => {
             renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pCompleted, sortedDtItems);
         }
 
+        // --- REAL PARETO COMPUTATION ---
+        // Pareto is calculated from all filtered downtime records:
+        // 1) aggregate downtime duration by equipment + line,
+        // 2) sort descending by total downtime hours,
+        // 3) calculate each cause's share of total downtime,
+        // 4) calculate cumulative percentage,
+        // 5) identify the first cause crossing the 80% cumulative threshold.
+        function computeDowntimePareto(logs) {
+            const map = {};
+
+            logs.forEach(dt => {
+                const start = new Date(dt.start);
+                const end = new Date(dt.end);
+                const hours = Math.max(0, (end - start) / (1000 * 60 * 60));
+                if (!Number.isFinite(hours) || hours <= 0) return;
+
+                const code = String(dt.code || '').trim();
+                const equipment = String(dt.equipment || '').trim();
+                const line = String(dt.line || '').trim();
+                const key = `${code} - ${equipment} (${line})`;
+
+                if (!map[key]) {
+                    map[key] = {
+                        name: key,
+                        category: String(dt.category || 'Unclassified'),
+                        incidents: 0,
+                        duration: 0
+                    };
+                }
+                map[key].incidents += 1;
+                map[key].duration += hours;
+            });
+
+            const items = Object.values(map)
+                .sort((a, b) => b.duration - a.duration || b.incidents - a.incidents);
+
+            const totalHours = items.reduce((sum, item) => sum + item.duration, 0);
+            let cumulative = 0;
+
+            items.forEach(item => {
+                item.percent = totalHours > 0 ? (item.duration / totalHours) * 100 : 0;
+                cumulative += item.percent;
+                item.cumulativePercent = cumulative;
+            });
+
+            const cutoffIndex = items.findIndex(item => item.cumulativePercent >= 80);
+            const cutoffCount = cutoffIndex >= 0 ? cutoffIndex + 1 : items.length;
+            const cutoffHours = cutoffIndex >= 0 ? items[cutoffIndex].duration : 0;
+
+            return {
+                items,
+                totalHours,
+                cutoffIndex,
+                cutoffCount,
+                cutoffHours
+            };
+        }
+
+        function formatParetoLabel(name, maxLength = 22) {
+            return name.length > maxLength ? `${name.slice(0, maxLength - 1)}…` : name;
+        }
+
         function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pCompleted, sortedDtItems) {
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
             if (!calibCanvas || !projCanvas || !paretoCanvas || typeof Chart === 'undefined') return;
 
-            // 1) Calibration completion — no overdue categories.
+            // 1) Calibration completion
             const ctxCalib = calibCanvas.getContext('2d');
             if (chartSummaryCalib) chartSummaryCalib.destroy();
             chartSummaryCalib = new Chart(ctxCalib, {
@@ -3019,32 +3074,144 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             });
 
-            // 3) Top downtime
+            // 3) REAL Pareto:
+            // bars = downtime hours per equipment/line, sorted descending;
+            // line = cumulative percentage of total downtime;
+            // dashed horizontal line = 80% threshold.
             const ctxPareto = paretoCanvas.getContext('2d');
             if (chartSummaryPareto) chartSummaryPareto.destroy();
-            const topItems = sortedDtItems.slice(0, 5);
+
+            // renderSummaryCharts receives aggregated items from renderSummaryModule.
+            // Reconstruct the chart from those already-computed totals while preserving
+            // the exact Pareto ordering/cumulative math.
+            const totalHours = Array.isArray(sortedDtItems)
+                ? sortedDtItems.reduce((sum, item) => sum + Number(item.duration || 0), 0)
+                : 0;
+            let running = 0;
+            const paretoItems = (Array.isArray(sortedDtItems) ? sortedDtItems : [])
+                .slice()
+                .sort((a, b) => Number(b.duration || 0) - Number(a.duration || 0))
+                .map(item => {
+                    const duration = Number(item.duration || 0);
+                    const pct = totalHours > 0 ? (duration / totalHours) * 100 : 0;
+                    running += pct;
+                    return { ...item, duration, percent: pct, cumulativePercent: running };
+                });
+
+            const topSummaryItems = paretoItems.slice(0, 8);
+            const labels = topSummaryItems.length
+                ? topSummaryItems.map(i => formatParetoLabel(i.name, 20))
+                : ['No Data'];
+
+            const barData = topSummaryItems.length
+                ? topSummaryItems.map(i => Number(i.duration.toFixed(2)))
+                : [0];
+
+            const cumulativeData = topSummaryItems.length
+                ? topSummaryItems.map(i => Number(i.cumulativePercent.toFixed(1)))
+                : [0];
+
+            const first80 = paretoItems.findIndex(i => i.cumulativePercent >= 80);
+            const cutoffCount = first80 >= 0 ? first80 + 1 : paretoItems.length;
+            const note = document.getElementById('summary-pareto-note');
+            if (note) {
+                note.textContent = paretoItems.length
+                    ? `${cutoffCount} of ${paretoItems.length} causes reach 80% • ${totalHours.toFixed(1)} total downtime hrs`
+                    : 'No downtime data for the selected period';
+            }
+
             chartSummaryPareto = new Chart(ctxPareto, {
-                type: 'bar',
                 data: {
-                    labels: topItems.length ? topItems.map(i => i.name.length > 18 ? i.name.slice(0,18) + '…' : i.name) : ['No Data'],
-                    datasets: [{
-                        label: 'Hours',
-                        data: topItems.length ? topItems.map(i => Number(i.duration.toFixed(1))) : [0],
-                        backgroundColor: '#f59e0b',
-                        borderRadius: 4,
-                        maxBarThickness: 22
-                    }]
+                    labels,
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Downtime (hrs)',
+                            data: barData,
+                            backgroundColor: '#f59e0b',
+                            borderRadius: 4,
+                            maxBarThickness: 22,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Cumulative %',
+                            data: cumulativeData,
+                            borderColor: '#38bdf8',
+                            backgroundColor: '#38bdf8',
+                            borderWidth: 2,
+                            pointRadius: 2,
+                            pointHoverRadius: 4,
+                            tension: 0.15,
+                            yAxisID: 'y1'
+                        },
+                        {
+                            type: 'line',
+                            label: '80% Threshold',
+                            data: labels.map(() => 80),
+                            borderColor: '#ef4444',
+                            borderWidth: 1.5,
+                            borderDash: [5, 4],
+                            pointRadius: 0,
+                            fill: false,
+                            yAxisID: 'y1'
+                        }
+                    ]
                 },
                 options: {
-                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, tooltip: { callbacks: {
-                        label: ctx => `${Number(ctx.raw || 0).toFixed(1)} hrs`
-                    }}},
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { boxWidth: 8, padding: 6, font: { size: 8 }, color: '#94a3b8' }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    if (ctx.dataset.label === 'Cumulative %' || ctx.dataset.label === '80% Threshold') {
+                                        return `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%`;
+                                    }
+                                    const item = paretoItems[ctx.dataIndex];
+                                    return item
+                                        ? `${item.name}: ${item.duration.toFixed(2)} hrs (${item.percent.toFixed(1)}%)`
+                                        : `Downtime: ${Number(ctx.raw || 0).toFixed(2)} hrs`;
+                                },
+                                afterLabel: function(ctx) {
+                                    if (ctx.dataset.label === 'Downtime (hrs)') {
+                                        const item = paretoItems[ctx.dataIndex];
+                                        return item ? `Cumulative: ${item.cumulativePercent.toFixed(1)}%` : '';
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    },
                     scales: {
-                        x: { beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.35)' } },
-                        y: { ticks: { font: { size: 8 }, color: '#94a3b8' }, grid: { display: false } }
+                        x: {
+                            ticks: { font: { size: 7 }, color: '#94a3b8', maxRotation: 45, minRotation: 30 },
+                            grid: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Hours', color: '#94a3b8', font: { size: 8 } },
+                            ticks: { font: { size: 8 }, color: '#94a3b8' },
+                            grid: { color: 'rgba(51, 65, 85, 0.35)' }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            min: 0,
+                            max: 100,
+                            position: 'right',
+                            title: { display: true, text: 'Cumulative %', color: '#94a3b8', font: { size: 8 } },
+                            ticks: {
+                                font: { size: 8 },
+                                color: '#94a3b8',
+                                callback: value => `${value}%`
+                            },
+                            grid: { drawOnChartArea: false }
+                        }
                     }
                 }
             });
@@ -3162,8 +3329,6 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("calib-kpi-overdue").innerText = tOverdue;
             const overdueDoneEl = document.getElementById("calib-kpi-overdue-done");
             if (overdueDoneEl) overdueDoneEl.innerText = tOverdueDone;
-            const extCompletedEl = document.getElementById("calib-kpi-ext-completed");
-            const intCompletedEl = document.getElementById("calib-kpi-int-completed");
             if (extCompletedEl) extCompletedEl.innerText = ext.DONE + ext["OVERDUE, DONE"];
             if (intCompletedEl) intCompletedEl.innerText = int.DONE + int["OVERDUE, DONE"];
             const statusCard = (label, value, cls) => `<div class="bg-slate-800/70 border border-slate-700/50 rounded-lg p-2"><div class="text-[9px] text-slate-500">${label}</div><div class="text-sm font-black ${cls}">${value}</div></div>`;
@@ -3625,41 +3790,130 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            // Render Downtime Pareto Chart
-            const dtMap = {};
-            primaryLogs.forEach(dt => {
-                const key = `${dt.code} - ${dt.equipment} (${dt.line})`;
-                const s = new Date(dt.start);
-                const e = new Date(dt.end);
-                const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
-                if (!dtMap[key]) dtMap[key] = 0;
-                dtMap[key] += dur;
-            });
-            const sortedPareto = Object.entries(dtMap).sort((a,b) => b[1] - a[1]).slice(0, 5);
+            // Render REAL Downtime Pareto Chart
+            const pareto = computeDowntimePareto(primaryLogs);
+            const sortedPareto = pareto.items;
 
             const ctxDowntimePareto = document.getElementById('chart-downtime-pareto').getContext('2d');
             if (chartDowntimePareto) chartDowntimePareto.destroy();
+
+            const detailedLabels = sortedPareto.length
+                ? sortedPareto.map(i => formatParetoLabel(i.name, 24))
+                : ['No Incidents'];
+
+            const detailedBars = sortedPareto.length
+                ? sortedPareto.map(i => Number(i.duration.toFixed(2)))
+                : [0];
+
+            const detailedCumulative = sortedPareto.length
+                ? sortedPareto.map(i => Number(i.cumulativePercent.toFixed(1)))
+                : [0];
+
+            const thresholdLabel = document.getElementById('dt-pareto-threshold-label');
+            if (thresholdLabel) {
+                thresholdLabel.textContent = sortedPareto.length
+                    ? `80% threshold reached by ${pareto.cutoffCount} of ${sortedPareto.length} equipment/line causes • ${pareto.totalHours.toFixed(1)} total downtime hrs`
+                    : 'No downtime data for the selected period.';
+            }
+
             chartDowntimePareto = new Chart(ctxDowntimePareto, {
-                type: 'bar',
                 data: {
-                    labels: sortedPareto.length ? sortedPareto.map(i => i[0].substring(0, 18) + '...') : ['No Incidents'],
-                    datasets: [{
-                        label: 'Duration (hrs)',
-                        data: sortedPareto.length ? sortedPareto.map(i => i[1]) : [0],
-                        backgroundColor: '#ef4444',
-                        borderRadius: 6
-                    }]
+                    labels: detailedLabels,
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Downtime (hrs)',
+                            data: detailedBars,
+                            backgroundColor: '#ef4444',
+                            borderRadius: 6,
+                            maxBarThickness: 34,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Cumulative %',
+                            data: detailedCumulative,
+                            borderColor: '#38bdf8',
+                            backgroundColor: '#38bdf8',
+                            borderWidth: 2,
+                            pointRadius: 2,
+                            pointHoverRadius: 4,
+                            tension: 0.15,
+                            yAxisID: 'y1'
+                        },
+                        {
+                            type: 'line',
+                            label: '80% Threshold',
+                            data: detailedLabels.map(() => 80),
+                            borderColor: '#f59e0b',
+                            borderWidth: 1.5,
+                            borderDash: [6, 4],
+                            pointRadius: 0,
+                            fill: false,
+                            yAxisID: 'y1'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { boxWidth: 9, padding: 7, font: { size: 8 }, color: '#94a3b8' }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    if (ctx.dataset.label === 'Cumulative %' || ctx.dataset.label === '80% Threshold') {
+                                        return `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%`;
+                                    }
+                                    const item = sortedPareto[ctx.dataIndex];
+                                    return item
+                                        ? `${item.name}: ${item.duration.toFixed(2)} hrs (${item.percent.toFixed(1)}%)`
+                                        : `Downtime: ${Number(ctx.raw || 0).toFixed(2)} hrs`;
+                                },
+                                afterLabel: function(ctx) {
+                                    if (ctx.dataset.label === 'Downtime (hrs)') {
+                                        const item = sortedPareto[ctx.dataIndex];
+                                        return item
+                                            ? `Incidents: ${item.incidents} • Cumulative: ${item.cumulativePercent.toFixed(1)}%`
+                                            : '';
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    },
                     scales: {
-                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.4)' } }
+                        x: {
+                            ticks: { font: { size: 8 }, color: '#94a3b8', maxRotation: 45, minRotation: 30 },
+                            grid: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Downtime Hours', color: '#94a3b8', font: { size: 9 } },
+                            ticks: { font: { size: 9 }, color: '#94a3b8' },
+                            grid: { color: 'rgba(51, 65, 85, 0.4)' }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            min: 0,
+                            max: 100,
+                            position: 'right',
+                            title: { display: true, text: 'Cumulative %', color: '#94a3b8', font: { size: 9 } },
+                            ticks: {
+                                font: { size: 9 },
+                                color: '#94a3b8',
+                                callback: value => `${value}%`
+                            },
+                            grid: { drawOnChartArea: false }
+                        }
                     }
                 }
             });
+
         }
 
         function handleDowntimeSubmit(e) {
