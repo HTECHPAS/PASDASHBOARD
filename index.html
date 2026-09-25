@@ -259,7 +259,12 @@ window.CloudSync = (() => {
     let ready = false;
     let syncing = false;
     let timer = null;
+    let refreshTimer = null;
     let lastError = "";
+    // Last cloud snapshot loaded into this browser. Used to detect only the
+    // records this browser actually changed, so Browser A cannot overwrite
+    // Browser B's unrelated changes with an old full-dataset snapshot.
+    const lastSynced = { equipment: [], downtime: [], projects: [], categories: {} };
 
     function configured() {
         return !!(
@@ -336,6 +341,7 @@ window.CloudSync = (() => {
 
         const rows = (data || []).map(row => row.data).filter(Boolean);
         writeArray(cfg.key, rows);
+        lastSynced[dataset] = JSON.parse(JSON.stringify(rows));
         return rows;
     }
 
@@ -357,6 +363,7 @@ window.CloudSync = (() => {
         Object.entries(CATEGORIES).forEach(([type, key]) => {
             if (Object.prototype.hasOwnProperty.call(grouped, type)) {
                 writeArray(key, grouped[type]);
+                lastSynced.categories[type] = JSON.parse(JSON.stringify(grouped[type]));
             }
         });
     }
@@ -391,10 +398,47 @@ window.CloudSync = (() => {
         }
     }
 
-    async function replaceDataset(dataset) {
+    function sameJson(a, b) {
+        return JSON.stringify(a) === JSON.stringify(b);
+    }
+
+    function mergeDataset(base, local, remote) {
+        const byId = arr => new Map((arr || []).filter(Boolean).map(x => [String(x?.id), x]));
+        const b = byId(base), l = byId(local), r = byId(remote);
+        const ids = new Set([...b.keys(), ...l.keys(), ...r.keys()]);
+        const merged = [];
+
+        for (const id of ids) {
+            const bv = b.get(id);
+            const lv = l.get(id);
+            const rv = r.get(id);
+            const localChanged = !sameJson(lv, bv);
+
+            if (localChanged) {
+                // This browser changed/created/deleted this record since its
+                // last cloud snapshot. Keep that intentional local change.
+                if (lv !== undefined) merged.push(lv);
+            } else if (rv !== undefined) {
+                // This browser did not touch it, so keep the newest cloud copy.
+                merged.push(rv);
+            }
+        }
+        return merged;
+    }
+
+    async function fetchRemoteDataset(dataset) {
         const cfg = DATASETS[dataset];
-        const values = readArray(cfg.key);
-        const rows = values.map((item, index) => ({
+        const { data, error } = await client
+            .from(cfg.table)
+            .select("record_id,data,updated_at")
+            .eq("app_id", window.CLOUD_CONFIG.appId);
+        if (error) throw error;
+        return (data || []).map(row => row.data).filter(Boolean);
+    }
+
+    async function replaceDataset(dataset, values) {
+        const cfg = DATASETS[dataset];
+        const rows = (values || []).map((item, index) => ({
             app_id: window.CLOUD_CONFIG.appId,
             record_id: rowId(item, index),
             data: item,
@@ -405,14 +449,10 @@ window.CloudSync = (() => {
             .from(cfg.table)
             .select("record_id")
             .eq("app_id", window.CLOUD_CONFIG.appId);
-
         if (existingError) throw existingError;
 
         const wanted = new Set(rows.map(r => r.record_id));
-        const removeIds = (existing || [])
-            .map(r => r.record_id)
-            .filter(id => !wanted.has(id));
-
+        const removeIds = (existing || []).map(r => r.record_id).filter(id => !wanted.has(id));
         if (removeIds.length) {
             const { error } = await client
                 .from(cfg.table)
@@ -421,7 +461,6 @@ window.CloudSync = (() => {
                 .in("record_id", removeIds);
             if (error) throw error;
         }
-
         if (rows.length) {
             const { error } = await client
                 .from(cfg.table)
@@ -430,9 +469,9 @@ window.CloudSync = (() => {
         }
     }
 
-    async function replaceCategories() {
+    async function replaceCategories(valuesByType) {
         for (const [type, key] of Object.entries(CATEGORIES)) {
-            const values = readArray(key);
+            const values = valuesByType?.[type] || readArray(key);
             const { error: deleteError } = await client
                 .from("category_records")
                 .delete()
@@ -457,18 +496,52 @@ window.CloudSync = (() => {
 
     async function push() {
         if (!client || syncing || !ready) return { ok: false, skipped: true };
-
         const user = await requireSession();
         if (!user) return { ok: false, error: "Login required." };
 
-        /* RLS is the final authorization layer; the UI also prevents viewers
-           from editing. */
         try {
             syncing = true;
-            await replaceDataset("equipment");
-            await replaceDataset("downtime");
-            await replaceDataset("projects");
-            await replaceCategories();
+            status("Syncing changes...", true);
+
+            // Re-read the cloud immediately before saving, then merge only
+            // this browser's changes since its last cloud snapshot.
+            const remote = {};
+            for (const dataset of Object.keys(DATASETS)) {
+                remote[dataset] = await fetchRemoteDataset(dataset);
+                const local = readArray(DATASETS[dataset].key);
+                const merged = mergeDataset(lastSynced[dataset], local, remote[dataset]);
+                writeArray(DATASETS[dataset].key, merged);
+            }
+
+            const remoteCats = {};
+            const { data: catRows, error: catError } = await client
+                .from("category_records")
+                .select("category_type,value")
+                .eq("app_id", window.CLOUD_CONFIG.appId)
+                .order("sort_order", { ascending: true });
+            if (catError) throw catError;
+            (catRows || []).forEach(row => {
+                if (!remoteCats[row.category_type]) remoteCats[row.category_type] = [];
+                remoteCats[row.category_type].push(row.value);
+            });
+            const mergedCats = {};
+            for (const [type, key] of Object.entries(CATEGORIES)) {
+                const base = lastSynced.categories[type] || [];
+                const local = readArray(key);
+                const remoteValues = remoteCats[type] || [];
+                // Categories are small shared lists; if changed locally, keep
+                // the local list, otherwise use the current cloud list.
+                mergedCats[type] = sameJson(local, base) ? remoteValues : local;
+                writeArray(key, mergedCats[type]);
+            }
+
+            for (const dataset of Object.keys(DATASETS)) {
+                await replaceDataset(dataset, readArray(DATASETS[dataset].key));
+                lastSynced[dataset] = JSON.parse(JSON.stringify(readArray(DATASETS[dataset].key)));
+            }
+            await replaceCategories(mergedCats);
+            lastSynced.categories = JSON.parse(JSON.stringify(mergedCats));
+
             status("Saved to cloud", true);
             return { ok: true };
         } catch (error) {
@@ -484,6 +557,35 @@ window.CloudSync = (() => {
         if (!configured() || syncing || !ready) return;
         clearTimeout(timer);
         timer = setTimeout(() => { push(); }, 900);
+    }
+
+    async function refreshIfClean() {
+        if (!configured() || syncing || !ready) return;
+        // Only pull automatically when this browser has no unsaved local edits.
+        // That lets another browser's saved changes appear without destroying
+        // edits currently being made here.
+        try {
+            for (const dataset of Object.keys(DATASETS)) {
+                const local = readArray(DATASETS[dataset].key);
+                if (!sameJson(local, lastSynced[dataset])) return;
+            }
+            await pull();
+            if (typeof renderAll === "function") renderAll();
+            else if (typeof renderSummaryModule === "function") {
+                renderSummaryModule();
+                renderCalibModule();
+                renderDowntimeModule();
+                renderCalendarModule();
+                renderProjectsModule();
+            }
+        } catch (e) {
+            console.warn("Cloud background refresh:", e);
+        }
+    }
+
+    function startBackgroundRefresh() {
+        clearInterval(refreshTimer);
+        refreshTimer = setInterval(refreshIfClean, 5000);
     }
 
     function installStorageWatcher() {
@@ -521,7 +623,10 @@ window.CloudSync = (() => {
         // IMPORTANT: install the watcher only AFTER the cloud pull. Otherwise
         // the pull itself can trigger a save of stale/partial browser data.
         const result = await pull();
-        if (result.ok) installStorageWatcher();
+        if (result.ok) {
+            installStorageWatcher();
+            startBackgroundRefresh();
+        }
         return result;
     }
 
@@ -529,6 +634,7 @@ window.CloudSync = (() => {
         start,
         pull,
         push,
+        refresh: refreshIfClean,
         isConfigured: configured,
         isReady: () => ready,
         getLastError: () => lastError,
