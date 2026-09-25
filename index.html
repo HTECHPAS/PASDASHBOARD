@@ -548,11 +548,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         const cloudResult = await window.CloudSync.start();
 
         if (cloudResult.ok) {
-            if (typeof loadSavedStorage === "function") {
-                try { loadSavedStorage(); } catch (e) { console.warn("Cloud state reload:", e); }
-            }
+            // Cloud data is the single source of truth. Do NOT reload the
+            // browser's old localStorage snapshot here, because that can
+            // overwrite/replace the freshly pulled cloud data differently
+            // on each browser/device.
             if (typeof loadSavedUsers === "function") {
                 try { loadSavedUsers(); } catch (e) { console.warn("Cloud users reload:", e); }
+            }
+
+            // Re-render from the arrays populated by CloudSync.pull().
+            if (typeof renderAll === "function") {
+                try { renderAll(); } catch (e) { console.warn("Cloud render:", e); }
+            } else if (typeof checkAuth === "function") {
+                try { checkAuth(); } catch (e) { console.warn("Cloud auth refresh:", e); }
             }
         }
 
