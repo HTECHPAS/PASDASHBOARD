@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>PASDASHBOARD - Plant Operations, Calibration & Process Automation System</title>
+    <!-- CLOUD BUILD: SUPABASE-ONLY-REFRESH-2026-09-25 -->
     <!-- Tailwind CSS CDN -->
     
 <script>
@@ -12,86 +16,217 @@
    ------------------------------------------------------------
    1) Create a free Supabase project.
    2) Run SUPABASE_SETUP.sql in Supabase SQL Editor.
-   3) Paste your Project URL and Publishable Key below.
-   4) Upload this HTML to your web host.
+   3) Paste your Supabase Publishable Key below.
+   4) The Project URL is already configured for PASDASHBOARD.
+   5) Upload this HTML to GitHub Pages or another HTTPS host.
+
+   SECURITY: Never place a Supabase Secret Key, service_role key, or
+   database password in this file.
    ============================================================ */
 window.CLOUD_CONFIG = {
-    enabled: false,
+    // Keep your existing Supabase Publishable Key here.
+    enabled: true,
     projectUrl: "https://hdgwrkywswxxetgvcwje.supabase.co",
-    publishableKey: "sb_publishable_sCfRtmewGMknvcTqPGkudg_jvl-7D4u",
+    publishableKey: "paskey",
     appId: "PASDASHBOARD"
 };
 
 window.CloudAuth = (() => {
     let client = null;
     let profile = null;
-    const EDGE_FUNCTION = "dashboard-user-admin";
-    const INTERNAL_DOMAIN = "pasdashboard.local";
+    const EDGE_FUNCTION_URL = "https://hdgwrkywswxxetgvcwje.supabase.co/functions/v1/dashboard-user-admin";
+    const INTERNAL_USER_DOMAIN = "pasdashboard.local";
+
+    function normalizeUsername(value) {
+        return String(value || "").trim().toLowerCase();
+    }
+
+    function usernameToAuthEmail(username) {
+        return `${normalizeUsername(username)}@${INTERNAL_USER_DOMAIN}`;
+    }
+
     function init() {
         if (!window.CLOUD_CONFIG.enabled || !window.supabase?.createClient) return false;
-        client = window.supabase.createClient(window.CLOUD_CONFIG.projectUrl, window.CLOUD_CONFIG.publishableKey);
+        client = window.supabase.createClient(
+            window.CLOUD_CONFIG.projectUrl,
+            window.CLOUD_CONFIG.publishableKey,
+            { auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false } }
+        );
         return true;
     }
-    function normalizeUsername(v) { return String(v || "").trim().toLowerCase(); }
-    function internalEmail(username) { return normalizeUsername(username) + "@" + INTERNAL_DOMAIN; }
+
     async function getProfile(userId) {
         if (!client || !userId) return null;
-        const { data } = await client.from("profiles").select("id,email,username,role,is_main").eq("id", userId).maybeSingle();
+        const { data, error } = await client
+            .from("profiles")
+            .select("id,email,username,role,is_main")
+            .eq("id", userId)
+            .maybeSingle();
+        if (error) {
+            profile = null;
+            return null;
+        }
         profile = data || null;
         return profile;
     }
+
     async function restoreSession() {
         if (!client) return null;
         const { data } = await client.auth.getSession();
         const user = data?.session?.user;
-        if (!user) return null;
+        if (!user) {
+            profile = null;
+            return null;
+        }
         return await getProfile(user.id);
     }
-    async function edge(body) {
-        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
-        const { data, error } = await client.functions.invoke(EDGE_FUNCTION, { body });
-        if (error) return { ok:false, error:error.message || "User service request failed." };
-        return data || { ok:false, error:"User service returned no response." };
+
+    async function callEdge(action, payload = {}) {
+        try {
+            let accessToken = "";
+            if (client) {
+                const { data } = await client.auth.getSession();
+                accessToken = data?.session?.access_token || "";
+            }
+
+            const headers = { "Content-Type": "application/json" };
+            if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+            const response = await fetch(EDGE_FUNCTION_URL, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ action, ...payload })
+            });
+
+            let result = null;
+            try { result = await response.json(); } catch (_) { result = null; }
+            if (!response.ok || !result?.ok) {
+                return { ok: false, error: result?.error || `Request failed (${response.status}).` };
+            }
+            return result;
+        } catch (error) {
+            return { ok: false, error: error?.message || "Unable to connect to the user service." };
+        }
     }
+
     async function signIn(identifier, password) {
         if (!client) return { ok:false, error:"Cloud authentication is not configured." };
         const raw = String(identifier || "").trim();
-        if (!raw || !password) return { ok:false, error:"Username/email and password are required." };
+        if (!raw || !password) return { ok:false, error:"Enter your username/email and password." };
+
+        // Main Account uses its real email. Non-main users use username only.
         if (raw.includes("@")) {
             const { data, error } = await client.auth.signInWithPassword({ email: raw, password });
-            if (error) return { ok:false, error:"Invalid email or password." };
+            if (error) return { ok:false, error:"Invalid username/email or password." };
             const p = await getProfile(data.user.id);
-            if (!p) { await client.auth.signOut(); return { ok:false, error:"User profile is not configured." }; }
+            if (!p) {
+                await client.auth.signOut();
+                return { ok:false, error:"User profile is not configured." };
+            }
             return { ok:true, user:data.user, profile:p };
         }
-        const result = await edge({ action:"login", username:normalizeUsername(raw), password });
-        if (!result.ok || !result.session) return { ok:false, error:result.error || "Invalid username or password." };
-        const { data, error } = await client.auth.setSession(result.session);
-        if (error || !data?.user) return { ok:false, error:error?.message || "Unable to start account session." };
-        const p = await getProfile(data.user.id);
-        if (!p) { await client.auth.signOut(); return { ok:false, error:"User profile is not configured." }; }
-        return { ok:true, user:data.user, profile:p };
+
+        const cleanUsername = normalizeUsername(raw);
+        const result = await callEdge("login", { username: cleanUsername, password });
+        if (!result.ok) return result;
+        if (!result.session?.access_token || !result.session?.refresh_token) {
+            return { ok:false, error:"Login service did not return a valid session." };
+        }
+
+        const { error: sessionError } = await client.auth.setSession({
+            access_token: result.session.access_token,
+            refresh_token: result.session.refresh_token
+        });
+        if (sessionError) return { ok:false, error:sessionError.message };
+
+        profile = result.profile || null;
+        return { ok:true, user:result.session.user, profile:profile };
     }
-    async function signOut() { if (client) await client.auth.signOut(); profile = null; }
+
+    async function signOut() {
+        if (client) {
+            try { await client.auth.signOut(); } catch (_) {}
+        }
+        profile = null;
+    }
+
     async function createUser(username, password, role) {
-        return await edge({ action:"create", username:normalizeUsername(username), password, role:role === "admin" ? "admin" : "viewer" });
+        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
+        const current = await client.auth.getUser();
+        if (!current?.data?.user) return { ok:false, error:"Main Account session required." };
+
+        const adminProfile = await getProfile(current.data.user.id);
+        if (adminProfile?.role !== "admin" || adminProfile?.is_main !== true) {
+            return { ok:false, error:"Only the Main Account can create users." };
+        }
+
+        const cleanUsername = normalizeUsername(username);
+        if (!/^[a-z0-9][a-z0-9._-]{2,30}$/.test(cleanUsername)) {
+            return { ok:false, error:"Username must be 3-31 characters using letters, numbers, dot, dash, or underscore." };
+        }
+        if (cleanUsername.includes("@")) {
+            return { ok:false, error:"Additional users use a username only. Do not enter an email address." };
+        }
+        if (cleanUsername === normalizeUsername(adminProfile.username)) {
+            return { ok:false, error:"Choose a different username." };
+        }
+        if (String(password || "").length < 6) {
+            return { ok:false, error:"Password must be at least 6 characters." };
+        }
+
+        const result = await callEdge("create", {
+            username: cleanUsername,
+            password,
+            role: role === "admin" ? "admin" : "viewer"
+        });
+        if (result.ok) profile = adminProfile;
+        return result.ok ? { ...result, username:cleanUsername } : result;
     }
+
     async function setRole(userId, role) {
-        return await edge({ action:"set_role", user_id:userId, role:role === "admin" ? "admin" : "viewer" });
+        if (!client) return { ok:false, error:"Cloud authentication is not configured." };
+        const current = await client.auth.getUser();
+        if (!current?.data?.user) return { ok:false, error:"Main Account session required." };
+        const me = await getProfile(current.data.user.id);
+        if (me?.role !== "admin" || me?.is_main !== true) {
+            return { ok:false, error:"Only the Main Account can manage users." };
+        }
+        return await callEdge("set_role", {
+            user_id: userId,
+            role: role === "admin" ? "admin" : "viewer"
+        });
     }
+
     async function listUsers() {
-        const result = await edge({ action:"list" });
-        return result.users || [];
+        if (!client) return [];
+        const current = await client.auth.getUser();
+        if (!current?.data?.user) return [];
+        const me = await getProfile(current.data.user.id);
+        if (me?.role !== "admin" || me?.is_main !== true) return [];
+        const result = await callEdge("list");
+        return result.ok ? (result.users || []) : [];
     }
-    return { init, restoreSession, signIn, signOut, createUser, setRole, listUsers, getProfile:()=>profile, getClient:()=>client };
+
+    return {
+        init,
+        restoreSession,
+        signIn,
+        signOut,
+        createUser,
+        setRole,
+        listUsers,
+        getProfile: () => profile,
+        getClient: () => client
+    };
 })();
 
 window.CloudSync = (() => {
     /*
       NORMALIZED CLOUD STORAGE
       ------------------------
-      The dashboard keeps its existing localStorage UI state, but cloud data
-      is now stored in separate PostgreSQL tables instead of one giant JSON
+      Supabase is the source of truth for shared dashboard data. localStorage
+      is only a browser working/cache layer and must never override a successful
+      cloud pull. Cloud data is stored in separate PostgreSQL tables instead of one giant JSON
       document. This makes the system much more scalable and searchable.
 
       Tables:
@@ -161,7 +296,7 @@ window.CloudSync = (() => {
             window.CLOUD_CONFIG.publishableKey,
             {
                 auth: {
-                    persistSession: true,
+                    persistSession: false,
                     autoRefreshToken: true,
                     detectSessionInUrl: true
                 }
@@ -381,8 +516,18 @@ window.CloudSync = (() => {
 
     async function start() {
         if (!init()) return { ok: false, configured: false };
-        installStorageWatcher();
-        return await pull();
+
+        // In cloud mode, browser localStorage is never a source of truth.
+        // Remove any data left by an older/test version before contacting Supabase.
+        // This prevents a failed/partial refresh from displaying stale test records.
+        if (configured()) {
+            Object.values(DATASETS).forEach(cfg => localStorage.removeItem(cfg.key));
+            Object.values(CATEGORIES).forEach(key => localStorage.removeItem(key));
+        }
+
+        const result = await pull();
+        if (result.ok) installStorageWatcher();
+        return result;
     }
 
     return {
@@ -390,6 +535,7 @@ window.CloudSync = (() => {
         pull,
         push,
         isConfigured: configured,
+        isReady: () => ready,
         getLastError: () => lastError,
         keys: [
             ...Object.values(DATASETS).map(x => x.key),
@@ -418,12 +564,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         const cloudResult = await window.CloudSync.start();
 
         if (cloudResult.ok) {
-            if (typeof loadSavedStorage === "function") {
-                try { loadSavedStorage(); } catch (e) { console.warn("Cloud state reload:", e); }
-            }
-            if (typeof loadSavedUsers === "function") {
-                try { loadSavedUsers(); } catch (e) { console.warn("Cloud users reload:", e); }
-            }
+            /* Supabase is authoritative. CloudSync.pull() already populated the
+               working arrays; never reload browser/test cache after a cloud pull. */
+        } else {
+            console.warn("Cloud data was not loaded; stale browser data will not be used.", cloudResult.error || "Unknown cloud error");
         }
 
         if (typeof checkAuth === "function") {
@@ -605,8 +749,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col transition-colors duration-200">
-
-    <!-- LOGIN OVERLAY SCREEN -->
+<!-- LOGIN OVERLAY SCREEN -->
     <div id="login-screen" class="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl space-y-6">
             <div class="text-center space-y-2">
@@ -916,7 +1059,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
                     <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
                         <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Instrument Count Total</span>
                         <span id="calib-kpi-total-note" class="block text-[9px] text-slate-500 mt-0.5">Each equipment code = 1 instrument</span>
@@ -925,6 +1068,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                     <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
                         <span class="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">DONE</span>
                         <p id="calib-kpi-done" class="text-2xl font-black text-emerald-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
+                        <span class="text-[10px] text-orange-400 uppercase font-bold tracking-wider">OVERDUE, DONE</span>
+                        <p id="calib-kpi-overdue-done" class="text-2xl font-black text-orange-400 mt-1">0</p>
                     </div>
                     <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
                         <span class="text-[10px] text-red-400 uppercase font-bold tracking-wider">OVERDUE</span>
@@ -959,6 +1106,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <div class="pt-2 flex items-center justify-center sm:justify-start gap-4 text-xs font-medium">
                                 <span>Active: <strong id="ext-active-num" class="text-white">0</strong></span>
                                 <span>Done: <strong id="ext-done-num" class="text-emerald-400">0</strong></span>
+                                <span>Overdue, Done: <strong id="ext-overdue-done-num" class="text-orange-400">0</strong></span>
                             </div>
                         </div>
                     </div>
@@ -977,6 +1125,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <div class="pt-2 flex items-center justify-center sm:justify-start gap-4 text-xs font-medium">
                                 <span>Active: <strong id="int-active-num" class="text-white">0</strong></span>
                                 <span>Done: <strong id="int-done-num" class="text-emerald-400">0</strong></span>
+                                <span>Overdue, Done: <strong id="int-overdue-done-num" class="text-orange-400">0</strong></span>
                             </div>
                         </div>
                     </div>
@@ -1268,7 +1417,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 <div class="flex items-center justify-between bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60 flex-wrap gap-2">
                     <div>
                         <h3 class="text-sm font-bold text-white"><span id="projects-area-title">Automation Engineering Projects - All Plants</span></h3>
-                        <p class="text-xs text-slate-400">Track milestones, upgrade timelines & plant engineering roadmaps</p>
+                        <p class="text-xs text-slate-400">Track milestones, editable project timelines & schedule computations</p>
                     </div>
                     <div class="flex items-center gap-2 flex-wrap no-print">
                         <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
@@ -1426,13 +1575,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             <!-- ADD / MANAGE SUB-USERS SECTION (Main Account Authority) -->
             <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-3">
                 <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-user-plus text-emerald-400 mr-1.5"></i> Authorized Operators / Users</h4>
-                <p class="text-[11px] text-slate-400">Add authorized user profiles who can open and view the application.</p>
+                <p class="text-[11px] text-slate-400">Create additional accounts using a username and password only. The Main Account continues to use its email address.</p>
 
                 <form onsubmit="handleAddUserSubmit(event)" class="space-y-3 text-xs pt-1">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
                         <div>
                             <label class="block text-slate-300 font-semibold mb-1">Username *</label>
                             <input type="text" id="new-user-name" required placeholder="Username" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
+                            <p class="text-[9px] text-slate-500 mt-1">Username only — no email required.</p>
                         </div>
                         <div>
                             <label class="block text-slate-300 font-semibold mb-1">Password *</label>
@@ -1446,7 +1596,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             </select>
                         </div>
                     </div>
-                    <p class="text-[10px] text-slate-500">Full Access users can use the same editing, adding, deleting, calibration, uptime, project, and user-management functions as the main account. View Only users can view records without changing them.</p>
+                    <p class="text-[10px] text-slate-500">Full Access users can edit dashboard records but cannot manage users. View Only users can view records without changing them. Only the Main Account can create or manage accounts.</p>
                     <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-xl transition shadow-md">
                         Add User Account
                     </button>
@@ -1595,6 +1745,22 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                 </div>
 
+                <div class="bg-slate-900/60 border border-slate-700/60 rounded-xl p-3 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <div>
+                            <label class="block text-slate-200 font-bold">Project Timeline</label>
+                            <p class="text-[10px] text-slate-500">Add milestones with dates. Project schedule calculations use these dates.</p>
+                        </div>
+                        <button type="button" onclick="addProjectMilestoneRow()" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold">
+                            <i class="fa-solid fa-plus mr-1"></i>Add Step
+                        </button>
+                    </div>
+                    <div id="project-timeline-editor" class="space-y-2"></div>
+                    <div id="project-timeline-empty" class="text-[10px] text-slate-500 text-center py-2">
+                        No timeline steps yet. Add a step to begin.
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-slate-300 font-semibold mb-1">Key Milestones & Updates</label>
                     <textarea id="proj-notes" rows="3" placeholder="List key deliverables or current status..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white outline-none"></textarea>
@@ -1605,6 +1771,24 @@ document.addEventListener("DOMContentLoaded", async () => {
                     <button type="submit" class="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold">Save Project</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <div id="modal-project-timeline" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden no-print">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-700">
+                <div>
+                    <h3 id="project-timeline-view-title" class="text-sm font-bold text-white">Project Timeline</h3>
+                    <p id="project-timeline-view-subtitle" class="text-[10px] text-slate-400"></p>
+                </div>
+                <button onclick="closeProjectTimeline()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div id="project-timeline-view-metrics" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+            <div id="project-timeline-view-list" class="space-y-3"></div>
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-700">
+                <button id="project-timeline-edit-btn" type="button" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold">Edit Timeline</button>
+                <button onclick="closeProjectTimeline()" class="px-4 py-2 rounded-xl bg-slate-700 text-slate-200 text-xs font-semibold">Close</button>
+            </div>
         </div>
     </div>
 
@@ -1631,16 +1815,22 @@ document.addEventListener("DOMContentLoaded", async () => {
         let CURRENT_ROLE = "admin";
         let CURRENT_IS_MAIN = false;
 
-        function isAdminUser() { return CURRENT_ROLE === "admin"; }
-        function isMainAccount() { return CURRENT_IS_MAIN === true; }
+        function isAdminUser() {
+            return CURRENT_ROLE === "admin";
+        }
+
+        function isMainAccount() {
+            return CURRENT_IS_MAIN === true;
+        }
 
         function applyAccessUI() {
             const isAdmin = isAdminUser();
+            const isMain = isMainAccount();
             const appContent = document.getElementById("app-content");
             if (appContent) appContent.classList.toggle("viewer-mode", !isAdmin);
 
             const settingsBtn = document.getElementById("main-acc-settings-btn");
-            if (settingsBtn) settingsBtn.classList.toggle("hidden", !isMainAccount());
+            if (settingsBtn) settingsBtn.classList.toggle("hidden", !isMain);
 
             // Viewer = view-only across all modules. Admin = full access.
             document.querySelectorAll(".admin-only").forEach(el => {
@@ -1673,27 +1863,22 @@ document.addEventListener("DOMContentLoaded", async () => {
             return await window.CloudAuth.restoreSession();
         }
 
-        async function checkAuth() {
+        function checkAuth() {
             const isAuth = sessionStorage.getItem("authenticated") === "true";
             const loggedUser = sessionStorage.getItem("logged_user");
-            if (isAuth && await cloudAuthEnabled()) {
-                const fresh = await window.CloudAuth.restoreSession();
-                if (!fresh) { sessionStorage.clear(); CURRENT_ROLE = "viewer"; CURRENT_IS_MAIN = false; document.getElementById("login-screen").classList.remove("hidden"); document.getElementById("app-content").classList.add("hidden"); return; }
-                CURRENT_ROLE = fresh.role === "admin" ? "admin" : "viewer";
-                CURRENT_IS_MAIN = fresh.is_main === true;
-                sessionStorage.setItem("logged_role", CURRENT_ROLE);
-                sessionStorage.setItem("logged_is_main", CURRENT_IS_MAIN ? "true" : "false");
-                sessionStorage.setItem("logged_user", fresh.is_main ? (fresh.email || loggedUser || "") : (fresh.username || loggedUser || ""));
-            }
             const loggedRole = sessionStorage.getItem("logged_role") || (loggedUser === AUTH_USER ? "admin" : "viewer");
+            const loggedIsMain = sessionStorage.getItem("logged_is_main") === "true";
+
             if (isAuth) {
                 CURRENT_ROLE = loggedRole;
+                CURRENT_IS_MAIN = loggedIsMain;
                 document.getElementById("login-screen").classList.add("hidden");
                 document.getElementById("app-content").classList.remove("hidden");
                 applyAccessUI();
                 initApp();
             } else {
                 CURRENT_ROLE = "viewer";
+                CURRENT_IS_MAIN = false;
                 document.getElementById("app-content").classList.remove("viewer-mode");
                 document.getElementById("login-screen").classList.remove("hidden");
                 document.getElementById("app-content").classList.add("hidden");
@@ -1710,13 +1895,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const result = await window.CloudAuth.signIn(u, p);
                 if (result.ok) {
                     sessionStorage.setItem("authenticated", "true");
-                    sessionStorage.setItem("logged_user", result.profile.is_main ? (result.profile.email || u) : (result.profile.username || u));
+                    sessionStorage.setItem("logged_user", result.profile.email || u);
                     sessionStorage.setItem("logged_role", result.profile.role === "admin" ? "admin" : "viewer");
                     sessionStorage.setItem("logged_is_main", result.profile.is_main ? "true" : "false");
                     CURRENT_ROLE = result.profile.role === "admin" ? "admin" : "viewer";
                     CURRENT_IS_MAIN = result.profile.is_main === true;
                     err.classList.add("hidden");
-                    await checkAuth();
+                    checkAuth();
                     return;
                 }
                 err.textContent = result.error || "Invalid email or password.";
@@ -1736,9 +1921,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 sessionStorage.setItem("authenticated", "true");
                 sessionStorage.setItem("logged_user", u);
                 sessionStorage.setItem("logged_role", role);
+                sessionStorage.setItem("logged_is_main", u === AUTH_USER ? "true" : "false");
                 CURRENT_ROLE = role;
+                CURRENT_IS_MAIN = u === AUTH_USER;
                 err.classList.add("hidden");
-                await checkAuth();
+                checkAuth();
             } else {
                 err.textContent = "Invalid username or password!";
                 err.classList.remove("hidden");
@@ -1828,7 +2015,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!username || !upass) return;
 
             if (await cloudAuthEnabled()) {
-                if (!/^[a-z0-9][a-z0-9._-]{2,30}$/.test(username.toLowerCase())) { alert("Username must be 3-31 characters using letters, numbers, dot, dash, or underscore."); return; }
+                if (username.includes("@")) { alert("Additional users use a username only. Do not enter an email address."); return; }
                 const result = await window.CloudAuth.createUser(username, upass, role);
                 if (!result.ok) { alert(result.error || "Unable to create user."); return; }
                 document.getElementById("new-user-name").value = "";
@@ -1869,7 +2056,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     item.className = "flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2 rounded-xl text-xs gap-2";
                     item.innerHTML = `
                         <div class="min-w-0">
-                            <div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.username || usr.email || "User")}</div>
+                            <div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.username || "User")}</div>
                             <div class="text-[9px] ${isFull ? "text-emerald-400" : "text-amber-400"} ml-5 font-bold">${isFull ? "Full Access" : "View Only"}</div>
                         </div>
                         <div class="flex items-center gap-1">
@@ -1895,7 +2082,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         async function toggleCloudUserRole(userId) {
-            if (!isAdminUser()) return;
+            if (!isMainAccount()) return;
             const users = await window.CloudAuth.listUsers();
             const usr = users.find(u => u.id === userId);
             if (!usr) return;
@@ -1913,7 +2100,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         function deleteSubUser(idx) {
-            if (!isMainAccount()) return;
+            if (CURRENT_ROLE !== "admin") return;
             if (confirm("Are you sure you want to remove access for this user?")) {
                 additionalUsers.splice(idx, 1);
                 localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
@@ -1983,6 +2170,19 @@ document.addEventListener("DOMContentLoaded", async () => {
             { id: 203, plant: "PreMix", title: "Automated Micro-Ingredient Dosing Integration", lead: "Engr. Cruz", date: "2026-12-20", progress: 25, status: "Planning", notes: "P&ID diagrams signed off. Ordering load cells and batch controllers." }
         ];
 
+        // These arrays may contain development/demo records in older builds.
+        // When Supabase cloud mode is enabled, those records must NEVER be used
+        // as fallback data. The only source is the successful Supabase pull above.
+        if (window.CLOUD_CONFIG?.enabled) {
+            equipmentList = [];
+            downtimeLogs = [];
+            projectsList = [];
+            equipmentCategories = [];
+            uptimeEquipmentCategories = [];
+            lineCategories = [];
+            downtimeCategories = [];
+        }
+
         let gaugeExt = null;
         let gaugeInt = null;
         let chartPareto = null;
@@ -1993,12 +2193,29 @@ document.addEventListener("DOMContentLoaded", async () => {
         let chartDowntimePareto = null;
 
         window.onload = function() {
-            loadSavedUsers();
+            // Require login again after every browser refresh.
+            sessionStorage.removeItem("authenticated");
+            sessionStorage.removeItem("logged_user");
+            sessionStorage.removeItem("logged_role");
+            sessionStorage.removeItem("logged_is_main");
+            CURRENT_ROLE = "viewer";
+            CURRENT_IS_MAIN = false;
+
+            // Additional users are cloud-managed. Do not restore the old
+            // local/test user list when the online Supabase version is active.
+            if (!window.CLOUD_CONFIG?.enabled) loadSavedUsers();
             checkAuth();
         };
 
         function initApp() {
-            loadSavedStorage();
+            if (window.CloudSync?.isConfigured?.()) {
+                if (!window.CloudSync.isReady?.()) {
+                    console.warn("Cloud data is not ready; localStorage will not override Supabase.");
+                    return;
+                }
+            } else {
+                loadSavedStorage();
+            }
             populateCategoryDropdowns();
             populateDowntimeCategoryDropdowns();
             populateUptimeEquipCategoryDropdowns();
@@ -2011,6 +2228,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         function loadSavedStorage() {
+            if (window.CloudSync?.isConfigured?.() && window.CloudSync.isReady?.()) {
+                return;
+            }
             const savedEq = localStorage.getItem("suite_equipment_data");
             const savedDt = localStorage.getItem("suite_downtime_data");
             const savedPr = localStorage.getItem("suite_projects_data");
@@ -2813,22 +3033,48 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // KPIs still count every equipment code as one instrument.
             let tTotal = filtered.length;
-            let tDone = 0, tOverdue = 0, tPending = 0, tStsok = 0, tNa = 0;
+            let tDone = 0, tOverdueDone = 0, tOverdue = 0, tPending = 0, tStsok = 0, tNa = 0;
+            let extDone = 0, extOverdueDone = 0, extOverdue = 0;
+            let intDone = 0, intOverdueDone = 0, intOverdue = 0;
             filtered.forEach(eq => {
                 const s = getCalibStatus(eq);
                 if (s === "DONE") tDone++;
+                else if (s === "OVERDUE, DONE") tOverdueDone++;
                 else if (s === "OVERDUE") tOverdue++;
                 else if (s === "PENDING") tPending++;
                 else if (s === "STSOK") tStsok++;
                 else tNa++;
+
+                if (eq.extSched) {
+                    const es = eq.extCalib
+                        ? (isOverdueDone(eq.extSched, eq.extCalib) ? "OVERDUE, DONE" : "DONE")
+                        : (new Date(eq.extSched) < new Date() ? "OVERDUE" : "OTHER");
+                    if (es === "DONE") extDone++;
+                    else if (es === "OVERDUE, DONE") extOverdueDone++;
+                    else if (es === "OVERDUE") extOverdue++;
+                }
+                if (eq.intSched) {
+                    const is = eq.intCalib
+                        ? (isOverdueDone(eq.intSched, eq.intCalib) ? "OVERDUE, DONE" : "DONE")
+                        : (new Date(eq.intSched) < new Date() ? "OVERDUE" : "OTHER");
+                    if (is === "DONE") intDone++;
+                    else if (is === "OVERDUE, DONE") intOverdueDone++;
+                    else if (is === "OVERDUE") intOverdue++;
+                }
             });
 
             document.getElementById("calib-kpi-total").innerText = tTotal;
+            const overdueDoneKpi = document.getElementById("calib-kpi-overdue-done");
+            if (overdueDoneKpi) overdueDoneKpi.innerText = tOverdueDone;
             const totalNote = document.getElementById("calib-kpi-total-note");
             if (totalNote) totalNote.innerText = `${tTotal} equipment code${tTotal === 1 ? "" : "s"} counted`;
             document.getElementById("calib-kpi-done").innerText = tDone;
             document.getElementById("calib-kpi-overdue").innerText = tOverdue;
             document.getElementById("calib-kpi-pending").innerText = tPending;
+            const extOverdueDoneEl = document.getElementById("ext-overdue-done-num");
+            const intOverdueDoneEl = document.getElementById("int-overdue-done-num");
+            if (extOverdueDoneEl) extOverdueDoneEl.innerText = extOverdueDone;
+            if (intOverdueDoneEl) intOverdueDoneEl.innerText = intOverdueDone;
             document.getElementById("calib-kpi-stsok").innerText = tStsok;
             document.getElementById("calib-kpi-na").innerText = tNa;
 
@@ -3506,6 +3752,178 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.getElementById("modal-day-details").classList.add("hidden");
         }
 
+        // --- AUTOMATION PROJECT TIMELINE HELPERS ---
+        function ensureProjectTimeline(pr) {
+            if (!pr.timeline || !Array.isArray(pr.timeline)) pr.timeline = [];
+            return pr.timeline;
+        }
+
+        function dateOnly(value) {
+            if (!value) return null;
+            const d = new Date(value + (String(value).length === 10 ? "T00:00:00" : ""));
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function getTimelineMetrics(pr) {
+            const timeline = ensureProjectTimeline(pr).filter(m => m && m.start && m.end);
+            if (!timeline.length) {
+                return { plannedDays: 0, elapsedPercent: 0, completedPercent: 0, variance: 0, completed: 0, total: 0, start: "", end: "" };
+            }
+
+            const starts = timeline.map(m => dateOnly(m.start)).filter(Boolean);
+            const ends = timeline.map(m => dateOnly(m.end)).filter(Boolean);
+            const start = new Date(Math.min(...starts.map(d => d.getTime())));
+            const end = new Date(Math.max(...ends.map(d => d.getTime())));
+            start.setHours(0,0,0,0);
+            end.setHours(23,59,59,999);
+
+            const now = new Date();
+            const plannedDays = Math.max(1, Math.ceil((end - start) / 86400000));
+            const elapsedDays = Math.max(0, Math.min(plannedDays, Math.ceil((Math.min(Math.max(now, start), end) - start) / 86400000)));
+            const elapsedPercent = Math.round((elapsedDays / plannedDays) * 100);
+            const completed = timeline.filter(m => m.status === "Completed").length;
+            const completedPercent = Math.round((completed / timeline.length) * 100);
+            const variance = completedPercent - elapsedPercent;
+
+            return {
+                plannedDays, elapsedPercent, completedPercent, variance,
+                completed, total: timeline.length,
+                start: start.toISOString().slice(0,10),
+                end: end.toISOString().slice(0,10)
+            };
+        }
+
+        function timelineStatusClass(status) {
+            return status === "Completed"
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                : status === "In Progress"
+                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                    : "bg-slate-700/50 text-slate-300 border-slate-600";
+        }
+
+        function renderProjectTimelinePreview(pr) {
+            const timeline = ensureProjectTimeline(pr);
+            const m = getTimelineMetrics(pr);
+            if (!timeline.length) {
+                return `<div class="text-[10px] text-slate-500 italic">No timeline steps yet. Click Edit to add milestones.</div>`;
+            }
+            const rows = timeline.slice(0, 4).map((step, i) => `
+                <div class="flex items-start gap-2">
+                    <div class="w-5 h-5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-300 text-[9px] font-bold flex items-center justify-center flex-shrink-0">${i+1}</div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[10px] text-slate-200 font-semibold truncate">${escapeHtml(step.name || `Milestone ${i+1}`)}</span>
+                            <span class="text-[9px] px-1.5 py-0.5 rounded border ${timelineStatusClass(step.status)}">${escapeHtml(step.status || "Pending")}</span>
+                        </div>
+                        <div class="text-[9px] text-slate-500">${escapeHtml(step.start || "—")} → ${escapeHtml(step.end || "—")}</div>
+                    </div>
+                </div>`).join("");
+            const more = timeline.length > 4 ? `<div class="text-[9px] text-cyan-400 font-semibold pl-7">+ ${timeline.length - 4} more milestone(s)</div>` : "";
+            return `
+                <div class="space-y-2">${rows}${more}</div>
+                <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-700/50">
+                    <div><div class="text-[9px] text-slate-500">Planned</div><div class="text-[11px] font-bold text-white">${m.plannedDays} days</div></div>
+                    <div><div class="text-[9px] text-slate-500">Schedule</div><div class="text-[11px] font-bold text-blue-400">${m.elapsedPercent}%</div></div>
+                    <div><div class="text-[9px] text-slate-500">Variance</div><div class="text-[11px] font-bold ${m.variance >= 0 ? "text-emerald-400" : "text-red-400"}">${m.variance >= 0 ? "+" : ""}${m.variance} pts</div></div>
+                </div>`;
+        }
+
+        function addProjectMilestoneRow(data = {}) {
+            const editor = document.getElementById("project-timeline-editor");
+            const empty = document.getElementById("project-timeline-empty");
+            if (!editor) return;
+            const row = document.createElement("div");
+            row.className = "project-timeline-row grid grid-cols-12 gap-2 items-end bg-slate-800 border border-slate-700/60 rounded-xl p-2";
+            row.innerHTML = `
+                <div class="col-span-12 sm:col-span-4">
+                    <label class="block text-[9px] text-slate-500 mb-1">Milestone</label>
+                    <input type="text" class="timeline-name w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-[10px]" value="${escapeHtml(data.name || "")}" placeholder="e.g. PLC Programming">
+                </div>
+                <div class="col-span-6 sm:col-span-2">
+                    <label class="block text-[9px] text-slate-500 mb-1">Start</label>
+                    <input type="date" class="timeline-start w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-[10px]" value="${data.start || ""}">
+                </div>
+                <div class="col-span-6 sm:col-span-2">
+                    <label class="block text-[9px] text-slate-500 mb-1">End</label>
+                    <input type="date" class="timeline-end w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-[10px]" value="${data.end || ""}">
+                </div>
+                <div class="col-span-9 sm:col-span-3">
+                    <label class="block text-[9px] text-slate-500 mb-1">Status</label>
+                    <select class="timeline-status w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-[10px]">
+                        <option value="Pending" ${(data.status || "Pending")==="Pending"?"selected":""}>Pending</option>
+                        <option value="In Progress" ${data.status==="In Progress"?"selected":""}>In Progress</option>
+                        <option value="Completed" ${data.status==="Completed"?"selected":""}>Completed</option>
+                    </select>
+                </div>
+                <button type="button" onclick="this.closest('.project-timeline-row').remove(); updateProjectTimelineEditorState()" class="col-span-3 sm:col-span-1 h-8 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20" title="Remove milestone">
+                    <i class="fa-solid fa-trash"></i>
+                </button>`;
+            editor.appendChild(row);
+            if (empty) empty.classList.add("hidden");
+        }
+
+        function updateProjectTimelineEditorState() {
+            const editor = document.getElementById("project-timeline-editor");
+            const empty = document.getElementById("project-timeline-empty");
+            if (editor && empty) empty.classList.toggle("hidden", editor.querySelectorAll(".project-timeline-row").length > 0);
+        }
+
+        function readProjectTimelineEditor() {
+            return Array.from(document.querySelectorAll("#project-timeline-editor .project-timeline-row")).map(row => ({
+                name: row.querySelector(".timeline-name")?.value.trim() || "",
+                start: row.querySelector(".timeline-start")?.value || "",
+                end: row.querySelector(".timeline-end")?.value || "",
+                status: row.querySelector(".timeline-status")?.value || "Pending"
+            })).filter(m => m.name || m.start || m.end);
+        }
+
+        function viewProjectTimeline(id) {
+            const pr = projectsList.find(item => item.id === id);
+            if (!pr) return;
+            const timeline = ensureProjectTimeline(pr);
+            const m = getTimelineMetrics(pr);
+            document.getElementById("project-timeline-view-title").innerText = pr.title;
+            document.getElementById("project-timeline-view-subtitle").innerText = `${pr.plant} • ${pr.lead}`;
+            document.getElementById("project-timeline-view-metrics").innerHTML = [
+                ["Planned Days", `${m.plannedDays} days`, "text-white"],
+                ["Schedule Elapsed", `${m.elapsedPercent}%`, "text-blue-400"],
+                ["Milestones Done", `${m.completed}/${m.total}`, "text-emerald-400"],
+                ["Schedule Variance", `${m.variance >= 0 ? "+" : ""}${m.variance} pts`, m.variance >= 0 ? "text-emerald-400" : "text-red-400"]
+            ].map(x => `<div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3"><div class="text-[9px] text-slate-500 uppercase font-bold">${x[0]}</div><div class="text-lg font-black ${x[2]} mt-1">${x[1]}</div></div>`).join("");
+
+            const list = document.getElementById("project-timeline-view-list");
+            if (!timeline.length) {
+                list.innerHTML = `<div class="text-center text-xs text-slate-500 py-8">No timeline milestones have been added.</div>`;
+            } else {
+                list.innerHTML = timeline.map((step, i) => `
+                    <div class="flex gap-3 items-stretch">
+                        <div class="flex flex-col items-center">
+                            <div class="w-8 h-8 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-bold flex items-center justify-center">${i+1}</div>
+                            ${i < timeline.length-1 ? '<div class="w-px flex-1 bg-slate-700 my-1"></div>' : ''}
+                        </div>
+                        <div class="flex-1 bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 mb-2">
+                            <div class="flex items-start justify-between gap-2">
+                                <div>
+                                    <div class="text-xs font-bold text-white">${escapeHtml(step.name || `Milestone ${i+1}`)}</div>
+                                    <div class="text-[10px] text-slate-500 mt-1">${escapeHtml(step.start || "—")} → ${escapeHtml(step.end || "—")}</div>
+                                </div>
+                                <span class="text-[9px] px-2 py-1 rounded border ${timelineStatusClass(step.status)}">${escapeHtml(step.status || "Pending")}</span>
+                            </div>
+                        </div>
+                    </div>`).join("");
+            }
+
+            document.getElementById("project-timeline-edit-btn").onclick = () => {
+                closeProjectTimeline();
+                editProject(pr.id);
+            };
+            document.getElementById("modal-project-timeline").classList.remove("hidden");
+        }
+
+        function closeProjectTimeline() {
+            document.getElementById("modal-project-timeline").classList.add("hidden");
+        }
+
         // --- MODULE 4: AUTOMATION PROJECTS ---
         function renderProjectsModule() {
             const yearFilter = document.getElementById("projects-year-filter").value;
@@ -3557,10 +3975,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         <p class="text-xs text-slate-300 bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">${escapeHtml(pr.notes || 'No milestones logged.')}</p>
 
+                        <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                                    <i class="fa-solid fa-timeline text-blue-400 mr-1"></i> Project Timeline
+                                </div>
+                                <button onclick="viewProjectTimeline(${pr.id})" class="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">View Timeline</button>
+                            </div>
+                            ${renderProjectTimelinePreview(pr)}
+                        </div>
+
                         <div class="flex items-center justify-between pt-2 border-t border-slate-700/50 text-xs">
                             <span class="text-slate-400"><i class="fa-solid fa-calendar text-amber-400 mr-1"></i> Target: ${pr.date}</span>
                             <div class="flex items-center gap-2">
-                                <button onclick="editProject(${pr.id})" class="text-blue-400 hover:text-blue-300 font-semibold"><i class="fa-solid fa-pen"></i></button>
+                                <button onclick="editProject(${pr.id})" class="text-blue-400 hover:text-blue-300 font-semibold" title="Edit project and timeline"><i class="fa-solid fa-pen"></i></button>
                                 <button onclick="deleteProject(${pr.id})" class="text-red-400 hover:text-red-300 font-semibold"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </div>
@@ -3605,6 +4033,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.getElementById("modal-proj-title").innerText = "New Automation Project";
             document.getElementById("form-project").reset();
             document.getElementById("proj-progress").value = "0";
+            const editor = document.getElementById("project-timeline-editor");
+            if (editor) editor.innerHTML = "";
+            updateProjectTimelineEditorState();
             document.getElementById("modal-project").classList.remove("hidden");
         }
 
@@ -3623,6 +4054,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const progress = parseInt(document.getElementById("proj-progress").value);
             const status = document.getElementById("proj-status").value;
             const notes = document.getElementById("proj-notes").value;
+            const timeline = readProjectTimelineEditor();
 
             if (id) {
                 const pr = projectsList.find(item => item.id == id);
@@ -3634,11 +4066,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                     pr.progress = progress;
                     pr.status = status;
                     pr.notes = notes;
+                    pr.timeline = timeline;
                 }
             } else {
                 projectsList.push({
                     id: Date.now(),
-                    title, plant, lead, date, progress, status, notes
+                    title, plant, lead, date, progress, status, notes, timeline
                 });
             }
 
@@ -3663,6 +4096,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.getElementById("proj-progress").value = pr.progress;
             document.getElementById("proj-status").value = pr.status;
             document.getElementById("proj-notes").value = pr.notes;
+
+            const editor = document.getElementById("project-timeline-editor");
+            if (editor) {
+                editor.innerHTML = "";
+                ensureProjectTimeline(pr).forEach(step => addProjectMilestoneRow(step));
+                updateProjectTimelineEditorState();
+            }
         }
 
         function deleteProject(id) {
