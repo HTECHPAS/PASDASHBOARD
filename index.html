@@ -791,9 +791,8 @@ window.addEventListener("cloudsync:status", (event) => {
         .chart-box-container {
             position: relative;
             width: 100%;
-            height: 220px !important;
-            min-height: 220px !important;
-            max-height: 220px !important;
+            height: 145px !important;
+            max-height: 145px !important;
             overflow: hidden;
             display: flex;
             align-items: center;
@@ -802,8 +801,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
         .chart-box-container canvas {
             max-width: 100% !important;
-            height: 220px !important;
-            max-height: 220px !important;
+            max-height: 145px !important;
         }
 
         @media print {
@@ -901,10 +899,7 @@ window.addEventListener("cloudsync:status", (event) => {
         .viewer-mode .admin-control {
             display: none !important;
         }
-    
-        .native-pareto-chart, .summary-native-chart { display:block !important; width:100%; height:220px !important; min-height:220px !important; visibility:visible !important; opacity:1 !important; }
-        .native-pareto-chart svg { display:block !important; width:100% !important; height:220px !important; }
-</style>
+    </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col transition-colors duration-200">
 
@@ -1033,16 +1028,16 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
                             <i class="fa-solid fa-filter text-slate-400"></i>
                             <select id="summary-filter-type" onchange="onSummaryFilterTypeChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
-                                <option value="all" class="bg-slate-800">All Years</option>
+                                <option value="all" class="bg-slate-800">All Time</option>
                                 <option value="year" class="bg-slate-800">Filter by Year</option>
                                 <option value="month" class="bg-slate-800">Filter by Month</option>
                                 <option value="compare-year" class="bg-slate-800">Compare Year vs Year</option>
                                 <option value="compare-month" class="bg-slate-800">Compare Month vs Month</option>
                             </select>
-                            <select id="summary-year-filter" onchange="renderSummaryModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden w-24"><option value="">All Years</option></select>
+                            <input type="number" id="summary-year-filter" min="2000" max="2100" placeholder="YYYY" oninput="renderSummaryModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden w-16">
                             <input type="month" id="summary-month-filter" onchange="renderSummaryModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden">
                             <span id="summary-compare-label" class="text-slate-400 hidden font-bold">vs</span>
-                            <select id="summary-compare-year" onchange="renderSummaryModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden w-24"><option value="">Year</option></select>
+                            <input type="number" id="summary-compare-year" min="2000" max="2100" placeholder="YYYY" oninput="renderSummaryModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden w-16">
                             <input type="month" id="summary-compare-month" onchange="renderSummaryModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden">
                         </div>
                         <span id="summary-compare-note" class="hidden text-[10px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded-lg font-semibold"></span>
@@ -1059,6 +1054,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-circle-check text-emerald-400"></i>
                         </div>
                         <h3 id="summary-availability-rate" class="text-2xl font-black text-emerald-400">0%</h3>
+                        <p id="summary-availability-compare" class="text-[9px] text-cyan-300 mt-0.5 hidden"></p>
                         <p class="text-[10px] text-slate-400 mt-1">% Operational Time</p>
                     </div>
 
@@ -1068,6 +1064,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-sliders text-blue-400"></i>
                         </div>
                         <h3 id="summary-calib-compliance" class="text-2xl font-black text-blue-400">0%</h3>
+                        <p id="summary-calib-compare" class="text-[9px] text-cyan-300 mt-0.5 hidden"></p>
                         <p class="text-[10px] text-slate-400 mt-1">Total Scheduled Compliance</p>
                     </div>
 
@@ -1077,6 +1074,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-bolt text-amber-400"></i>
                         </div>
                         <h3 id="summary-uptime-rate" class="text-2xl font-black text-cyan-400">0%</h3>
+                        <p id="summary-uptime-compare" class="text-[9px] text-cyan-300 mt-0.5 hidden"></p>
                         <p class="text-[10px] text-slate-400 mt-1">Reliability Target &gt;95%</p>
                     </div>
 
@@ -1086,18 +1084,19 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-diagram-project text-indigo-400"></i>
                         </div>
                         <h3 id="summary-projects-count" class="text-2xl font-black text-indigo-400">0</h3>
+                        <p id="summary-projects-compare" class="text-[9px] text-cyan-300 mt-0.5 hidden"></p>
                         <p class="text-[10px] text-slate-400 mt-1">Engineering Upgrades</p>
                     </div>
                 </div>
 
                 <!-- ALL THREE GRAPHS BESIDE EACH OTHER IN A 3-COLUMN GRID -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-2">
                     <div class="bg-slate-800/90 border border-slate-700/60 p-2.5 rounded-xl space-y-2 overflow-hidden flex flex-col justify-between">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-pie text-emerald-400"></i> Calibration Status Breakdown
                         </h4>
-                        <div class="chart-box-container min-h-[225px]">
-                            <canvas id="chart-summary-calib"></canvas>
+                        <div class="chart-box-container">
+                            <canvas id="chart-summary-calib" style="display:none"></canvas><div id="chart-summary-calib-native" class="summary-native-chart" style="display:block;width:100%;height:220px;min-height:220px;"></div>
                         </div>
                     </div>
 
@@ -1105,8 +1104,8 @@ window.addEventListener("cloudsync:status", (event) => {
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress
                         </h4>
-                        <div class="chart-box-container min-h-[225px]">
-                            <canvas id="chart-summary-projects"></canvas>
+                        <div class="chart-box-container">
+                            <canvas id="chart-summary-projects" style="display:none"></canvas><div id="chart-summary-projects-native" class="summary-native-chart" style="display:block;width:100%;height:220px;min-height:220px;"></div>
                         </div>
                     </div>
 
@@ -1114,10 +1113,11 @@ window.addEventListener("cloudsync:status", (event) => {
                         <h4 id="summary-pareto-title" class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-bar text-amber-400"></i> Downtime Pareto by Line Category
                         </h4>
-                        <div class="chart-box-container min-h-[225px]">
-                            <canvas id="chart-summary-pareto"></canvas>
+                        <div class="chart-box-container" id="summary-pareto-host">
+                            <canvas id="chart-summary-pareto" style="display:none"></canvas>
+                            <div id="summary-pareto-native" class="summary-native-chart" style="display:block;width:100%;height:220px;min-height:220px;"></div>
                         </div>
-                        <p id="summary-pareto-note" class="text-[9px] text-slate-400 text-center leading-tight">Bars show the specific equipment with the highest downtime contribution for each ranked line; Other combines the remaining lines.</p>
+                        <p id="summary-pareto-note" class="text-[9px] text-slate-500 text-center">Specific equipment contributors with Line, downtime hours and cumulative %; comparison shows Date 1 vs Date 2.</p>
                     </div>
                 </div>
 
@@ -1144,7 +1144,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     <div class="flex items-center justify-between border-b border-slate-700/60 pb-2 gap-2">
                         <div class="min-w-0">
                             <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-clock-rotate-left text-amber-400"></i> <span id="summary-reliability-title">System Reliability & Top Equipment by Line</span>
+                                <i class="fa-solid fa-clock-rotate-left text-amber-400"></i> System Reliability & Top Equipment by Line
                             </h4>
                             <p id="summary-top-period-label" class="text-[9px] text-cyan-300 font-semibold mt-1">Selected period</p>
                         </div>
@@ -1188,6 +1188,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                 </div>
                             </div>
 
+                            <div id="summary-per-plant-reports" class="space-y-3"></div>
 
                             <div class="space-y-2">
                                 <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
@@ -1373,17 +1374,17 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs flex-wrap">
                             <i class="fa-solid fa-filter text-slate-400"></i>
                             <select id="uptime-filter-type" onchange="onUptimeFilterTypeChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
-                                <option value="all" class="bg-slate-800">All Years</option>
+                                <option value="all" class="bg-slate-800">All Time</option>
                                 <option value="year" class="bg-slate-800">Filter by Year</option>
                                 <option value="month" class="bg-slate-800">Filter by Month</option>
                                 <option value="compare-year" class="bg-slate-800">Compare Year vs Year</option>
                                 <option value="compare-month" class="bg-slate-800">Compare Month vs Month</option>
                             </select>
 
-                            <select id="uptime-year-filter" onchange="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden w-24"><option value="">All Years</option></select>
+                            <input type="number" id="uptime-year-filter" min="2000" max="2100" placeholder="YYYY" oninput="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden w-16">
                             <input type="month" id="uptime-month-filter" onchange="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden">
                             <span id="compare-label" class="text-slate-400 hidden font-bold">vs</span>
-                            <select id="uptime-compare-year" onchange="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden w-24"><option value="">Year</option></select>
+                            <input type="number" id="uptime-compare-year" min="2000" max="2100" placeholder="YYYY" oninput="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden w-16">
                             <input type="month" id="uptime-compare-month" onchange="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden">
 
                             <button onclick="resetUptimeFilter()" class="text-slate-400 hover:text-white pl-1 text-[10px]" title="Clear Filter">
@@ -1443,17 +1444,14 @@ window.addEventListener("cloudsync:status", (event) => {
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    <div id="downtime-entry-panel" class="fixed inset-0 z-[100] hidden bg-slate-950/75 backdrop-blur-sm p-4 no-print items-center justify-center" style="display:none;" onclick="if(event.target===this) closeDowntimeForm()">
-                        <div class="bg-slate-800/95 border border-slate-600/80 p-5 rounded-2xl space-y-4 w-full max-w-3xl max-h-[92vh] overflow-y-auto shadow-2xl">
+                    <div id="downtime-entry-panel" class="lg:col-span-5 bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-4 no-print hidden">
                         <div class="flex items-center justify-between pb-2 border-b border-slate-700">
                             <h3 id="downtime-form-title" class="text-sm font-bold text-white flex items-center gap-2">
                                 <i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Log Downtime Event
                             </h3>
                             <div class="flex items-center gap-2">
                                 <span class="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20 font-semibold">Process Automation</span>
-                                <button type="button" onclick="closeDowntimeForm()" class="text-slate-400 hover:text-white text-xs" title="Close">
-                                    <i class="fa-solid fa-xmark"></i>
-                                </button>
+                                <button type="button" onclick="closeDowntimeForm()" class="text-slate-400 hover:text-white text-xs" title="Close"><i class="fa-solid fa-xmark"></i></button>
                             </div>
                         </div>
 
@@ -1517,20 +1515,18 @@ window.addEventListener("cloudsync:status", (event) => {
                                 </button>
                             </div>
                         </form>
-                        </div>
                     </div>
 
                     <div class="lg:col-span-7 bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between overflow-hidden">
                         <div class="flex items-center justify-between pb-2 border-b border-slate-700/50">
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                                <i class="fa-solid fa-chart-bar text-blue-400"></i> <span id="dt-pareto-title">Downtime Pareto by Line Category — Specific Equipment</span>
+                            <h3 id="dt-pareto-title" class="text-sm font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-chart-bar text-blue-400"></i> Downtime Pareto by Line Category
                             </h3>
                             <span id="dt-chart-plant-label" class="text-xs text-slate-400">All Plants Breakdown</span>
                         </div>
                         <div class="chart-box-container flex-1 my-2">
                             <canvas id="chart-downtime-pareto"></canvas>
                         </div>
-                        <p id="dt-pareto-note" class="text-[9px] text-slate-400 text-center leading-tight">Bars show the specific equipment with the highest downtime contribution for each ranked line; Other combines the remaining lines.</p>
                     </div>
                 </div>
 
@@ -2557,6 +2553,35 @@ window.addEventListener("cloudsync:status", (event) => {
         let chartSummaryProjects = null;
         let chartProjectsMill = null;
         let chartDowntimePareto = null;
+
+        // Chart.js is an external dependency. Some browsers/networks can block or delay the CDN,
+        // which used to leave the Executive Summary canvases completely blank. Load a backup copy
+        // when needed, and keep a native fallback renderer available so data is still visible.
+        let chartJsRecoveryPromise = null;
+        function ensureChartJsAvailable() {
+            if (typeof Chart !== "undefined") return Promise.resolve(true);
+            if (chartJsRecoveryPromise) return chartJsRecoveryPromise;
+            chartJsRecoveryPromise = new Promise(resolve => {
+                const sources = [
+                    "https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js",
+                    "https://unpkg.com/chart.js@4.5.0/dist/chart.umd.min.js"
+                ];
+                let index = 0;
+                const next = () => {
+                    if (typeof Chart !== "undefined") return resolve(true);
+                    if (index >= sources.length) return resolve(false);
+                    const script = document.createElement("script");
+                    script.src = sources[index++];
+                    script.async = true;
+                    script.onload = () => resolve(typeof Chart !== "undefined");
+                    script.onerror = next;
+                    document.head.appendChild(script);
+                };
+                next();
+            });
+            return chartJsRecoveryPromise;
+        }
+
         // Keep inline project timelines open when background cloud refreshes redraw the project cards.
         const expandedProjectTimelines = new Set();
 
@@ -2579,11 +2604,31 @@ window.addEventListener("cloudsync:status", (event) => {
             populateDowntimeCategoryDropdowns();
             populateUptimeEquipCategoryDropdowns();
             populateLineCategoryDropdowns();
+
+            // Render immediately from the loaded data. If Chart.js is unavailable,
+            // the summary uses a native fallback instead of showing blank cards.
             renderSummaryModule();
             renderCalibModule();
             renderDowntimeModule();
             renderCalendarModule();
             renderProjectsModule();
+
+            // If the primary Chart.js CDN was slow/blocked, retry two backup CDNs and
+            // redraw only after the library becomes available. This avoids changing any
+            // filters or data while repairing the visual layer.
+            if (typeof Chart === "undefined") {
+                ensureChartJsAvailable().then(ok => {
+                    if (!ok) return;
+                    try {
+                        renderSummaryModule();
+                        renderCalibModule();
+                        renderDowntimeModule();
+                        renderProjectsModule();
+                    } catch (e) {
+                        console.warn("Chart.js recovery render:", e);
+                    }
+                });
+            }
         }
 
         function loadSavedStorage() {
@@ -3006,26 +3051,7 @@ window.addEventListener("cloudsync:status", (event) => {
             renderProjectsModule();
         }
 
-        function populateDashboardYearFilters() {
-            const years = new Set();
-            const addDate = d => { if (!d) return; const dt = new Date(d); if (!isNaN(dt.getTime())) years.add(String(dt.getFullYear())); };
-            (downtimeLogs || []).forEach(dt => { addDate(dt.start); addDate(dt.end); });
-            (equipmentList || []).forEach(eq => { addDate(eq.extSched); addDate(eq.extCalib); addDate(eq.intSched); addDate(eq.intCalib); });
-            (projectsList || []).forEach(pr => { addDate(pr.date); addDate(pr.startDate); addDate(pr.endDate); addDate(pr.targetDate); });
-            years.add(String(new Date().getFullYear()));
-            const ordered = [...years].filter(Boolean).sort((a,b) => Number(b)-Number(a));
-            [['summary-year-filter','All Years'],['summary-compare-year','Select Year'],['uptime-year-filter','All Years'],['uptime-compare-year','Select Year']].forEach(([id,placeholder]) => {
-                const el=document.getElementById(id); if(!el) return;
-                const current=el.value;
-                el.innerHTML='';
-                const opt=document.createElement('option'); opt.value=''; opt.textContent=placeholder; el.appendChild(opt);
-                ordered.forEach(y=>{ const o=document.createElement('option'); o.value=y; o.textContent=y; el.appendChild(o); });
-                if(current && ordered.includes(String(current))) el.value=String(current);
-            });
-        }
-
         function onSummaryFilterTypeChange() {
-            populateDashboardYearFilters();
             const fType = document.getElementById("summary-filter-type").value;
             const yearInput = document.getElementById("summary-year-filter");
             const monthInput = document.getElementById("summary-month-filter");
@@ -3049,13 +3075,13 @@ window.addEventListener("cloudsync:status", (event) => {
                 compareLabel.classList.remove("hidden");
                 compareYear.classList.remove("hidden");
                 if (!yearInput.value) yearInput.value = thisYear;
-                if (!compareYear.value) compareYear.value = String(thisYear - 1);
+                if (!compareYear.value) compareYear.value = thisYear - 1;
             } else if (fType === "compare-month") {
                 monthInput.classList.remove("hidden");
                 compareLabel.classList.remove("hidden");
                 compareMonth.classList.remove("hidden");
                 if (!monthInput.value) monthInput.value = thisMonth;
-                if (!compareMonth.value) compareMonth.value = thisMonth;
+                if (!compareMonth.value) compareMonth.value = `${thisYear - 1}-${String(now.getMonth() + 1).padStart(2, '0')}`;
             }
             renderSummaryModule();
         }
@@ -3161,7 +3187,6 @@ window.addEventListener("cloudsync:status", (event) => {
 
         // --- MODULE 0: SUMMARY ---
         function renderSummaryModule() {
-            populateDashboardYearFilters();
             const fType = document.getElementById("summary-filter-type").value;
             // Mirror the Executive Summary period selection into Uptime/Downtime.
             if (!window._syncingDashboardFilters) {
@@ -3187,6 +3212,9 @@ window.addEventListener("cloudsync:status", (event) => {
             const primaryValue = primaryType === "year" ? yearVal : monthVal;
             const compareType = fType === "compare-year" ? "year" : "month";
             const compareValue = fType === "compare-year" ? compareYearVal : compareMonthVal;
+            // Keep the Automation Projects mill graph on the same primary year when a year filter is used.
+            const projectYearFilter = document.getElementById("projects-year-filter");
+            if (projectYearFilter && primaryType === "year" && primaryValue) projectYearFilter.value = primaryValue;
 
             const matchesSummaryDate = (dateStr, type, value) => {
                 if (!dateStr || type === "all" || !value) return true;
@@ -3310,6 +3338,32 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             }
 
+            // Reliability supporting details by plant — synchronized to the same primary/compare downtime filters.
+            const reliabilitySupp = document.getElementById('summary-per-plant-reports');
+            if (reliabilitySupp) {
+                const reliabilityPlants = currentPlant === 'ALL' ? ['Plant 1','Plant 2','PreMix'] : [normalizePlant(currentPlant)];
+                const calcReliability = logs => {
+                    const out = {};
+                    reliabilityPlants.forEach(p => out[p] = {hours:0,count:0,uptime:100,mtbf:0,mttr:0});
+                    (logs || []).forEach(dt => {
+                        const p = normalizePlant(dt.plant);
+                        if (!out[p]) return;
+                        const diff = (new Date(dt.end)-new Date(dt.start))/(1000*60*60);
+                        if (diff > 0) out[p].hours += diff;
+                        out[p].count++;
+                    });
+                    reliabilityPlants.forEach(p => {
+                        const x=out[p], available=(x.count||1)*720;
+                        x.uptime=Math.max(0,Math.min(100,(1-(x.hours/available))*100));
+                        x.mtbf=x.count?720/x.count:0;
+                        x.mttr=x.count?(x.hours/x.count)*60:0;
+                    });
+                    return out;
+                };
+                const rel1=calcReliability(filteredDt), rel2=isCompare?calcReliability(comparisonDt):{};
+                reliabilitySupp.innerHTML = `<div class="overflow-x-auto rounded-xl border border-slate-700/50"><table class="w-full text-left text-xs text-slate-300"><thead class="bg-slate-900/80 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60"><tr>${isCompare?`<th class="px-2 py-1.5">Plant</th><th class="px-2 py-1.5 text-center">${escapeHtml(primaryValue)} DT</th><th class="px-2 py-1.5 text-center">${escapeHtml(primaryValue)} Uptime</th><th class="px-2 py-1.5 text-center">${escapeHtml(compareValue)} DT</th><th class="px-2 py-1.5 text-center">${escapeHtml(compareValue)} Uptime</th>`:`<th class="px-2 py-1.5">Plant</th><th class="px-2 py-1.5 text-center">Downtime</th><th class="px-2 py-1.5 text-center">Uptime</th><th class="px-2 py-1.5 text-center">MTBF</th><th class="px-2 py-1.5 text-center">MTTR</th>`}</tr></thead><tbody>${reliabilityPlants.map(p=>{const a=rel1[p]||{},b=rel2[p]||{};return `<tr class="border-t border-slate-700/30"><td class="px-2 py-1.5 font-semibold text-white">${escapeHtml(p)}</td>${isCompare?`<td class="px-2 py-1.5 text-center text-red-400 font-semibold">${a.hours.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-cyan-300">${a.uptime.toFixed(1)}%</td><td class="px-2 py-1.5 text-center text-blue-400 font-semibold">${b.hours.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-cyan-300">${b.uptime.toFixed(1)}%</td>`:`<td class="px-2 py-1.5 text-center text-red-400 font-semibold">${a.hours.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-cyan-300">${a.uptime.toFixed(1)}%</td><td class="px-2 py-1.5 text-center text-blue-300">${a.mtbf.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-amber-300">${Math.round(a.mttr)} mins</td>`}</tr>`;}).join('')}</tbody></table></div>`;
+            }
+
             // Pareto = total downtime by Line Category. Repeated records for the same line are added together.
             const sortedLinePareto = buildPareto(filteredDt);
             const sortedComparePareto = isCompare ? buildPareto(comparisonDt) : [];
@@ -3341,16 +3395,6 @@ window.addEventListener("cloudsync:status", (event) => {
                     compareNote.classList.add('hidden');
                 }
             }
-
-            // Supporting-detail plant definitions must exist before System Reliability
-            // renders. Keeping these declarations above all dependent sections prevents
-            // a temporal-dead-zone error from stopping the Executive Summary renderer.
-            const allSummaryPlants = ["Plant 1", "Plant 2", "PreMix"];
-            const summaryPlants = currentPlant === "ALL"
-                ? allSummaryPlants
-                : allSummaryPlants.filter(p => normalizePlant(p) === normalizePlant(currentPlant));
-
-            // Per-plant reliability cards removed. System Reliability is shown once for the selected scope.
 
             // Top Equipment = ONE row per Line Category. Aggregate by Equipment + Failure Category and keep only the highest total downtime for each line.
             const lineEquipmentMap = {};
@@ -3405,8 +3449,6 @@ window.addEventListener("cloudsync:status", (event) => {
             const topPrimaryFailureHead = document.getElementById("summary-top-primary-failure-head");
             const topCompareEquipHead = document.getElementById("summary-top-compare-equip-head");
             const topCompareFailureHead = document.getElementById("summary-top-compare-failure-head");
-            const reliabilityTitle = document.getElementById("summary-reliability-title");
-            if (reliabilityTitle) reliabilityTitle.textContent = 'System Reliability & Top Equipment by Line';
             const topPeriodLabel = document.getElementById("summary-top-period-label");
             if (topPrimaryHead) topPrimaryHead.textContent = isCompare ? `${primaryValue || 'Period 1'} Time` : 'Total Time';
             if (topPrimaryEquipHead) topPrimaryEquipHead.textContent = isCompare ? `${primaryValue || 'Period 1'} Equipment` : 'Equipment';
@@ -3449,6 +3491,11 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Supporting details: one row per plant, always visible. The main plant filter
             // controls which rows are shown; calibration totals external + internal schedules.
+            const allSummaryPlants = ["Plant 1", "Plant 2", "PreMix"];
+            const summaryPlants = currentPlant === "ALL"
+                ? allSummaryPlants
+                : allSummaryPlants.filter(p => normalizePlant(p) === normalizePlant(currentPlant));
+
             const calibByPlant = {};
             const projectByPlant = {};
             allSummaryPlants.forEach(p => {
@@ -3526,7 +3573,6 @@ window.addEventListener("cloudsync:status", (event) => {
             const pOnHold = filteredPr.filter(pr => String(pr.status || "").trim() === "On Hold").length;
             const pCompleted = filteredPr.filter(pr => String(pr.status || "").trim() === "Completed").length;
 
-            const compareProjectPeriodByPlant = compareProjectByPlant;
             const projectPeriodLabel = document.getElementById("summary-project-period-label");
             if (projectPeriodLabel) projectPeriodLabel.textContent = isCompare ? `${primaryValue} vs ${compareValue}` : (primaryValue || "All Time");
 
@@ -3576,12 +3622,86 @@ window.addEventListener("cloudsync:status", (event) => {
                 const status = String(pr.status || "Planning").trim();
                 if (compareProjectByPlant[plant] && Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant], status)) compareProjectByPlant[plant][status]++;
             });
+            // Comparison values for ALL Executive Summary headline KPIs.
+            // Every headline uses the exact same primary/compare filters as the graphs and supporting tables.
+            const setCompareText = (id, text, show) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = text || '';
+                el.classList.toggle('hidden', !show);
+            };
+            if (isCompare) {
+                let compareDtHours = 0;
+                comparisonDt.forEach(dt => {
+                    const s = new Date(dt.start), e = new Date(dt.end);
+                    const diff = (e-s)/(1000*60*60);
+                    if (diff > 0) compareDtHours += diff;
+                });
+                const compareAvailableHours = (comparisonDt.length > 0 ? comparisonDt.length : 1) * 720;
+                const compareUptime = Math.max(0, Math.min(100, parseFloat(((1-(compareDtHours/compareAvailableHours))*100).toFixed(1))));
+                const compareCalibCompliance = compareScheduled > 0 ? Math.round((compareDone / compareScheduled) * 100) : 0;
+                setCompareText('summary-availability-compare', `${primaryValue || 'Date 1'}: ${availabilityRate}%  |  ${compareValue}: ${compareUptime}%`, true);
+                setCompareText('summary-calib-compare', `${primaryValue || 'Date 1'}: ${totalScheduledCalib > 0 ? Math.round((cDone / totalScheduledCalib) * 100) : 0}%  |  ${compareValue}: ${compareCalibCompliance}%`, true);
+                setCompareText('summary-uptime-compare', `${primaryValue || 'Date 1'}: ${uptimeRate}%  |  ${compareValue}: ${compareUptime}%`, true);
+                setCompareText('summary-projects-compare', `${primaryValue || 'Date 1'}: ${filteredPr.length}  |  ${compareValue}: ${comparisonPr.length}`, true);
+                const av = document.getElementById('summary-availability-rate');
+                const up = document.getElementById('summary-uptime-rate');
+                if (av) av.title = `${primaryValue || 'Period 1'}: ${availabilityRate}% | ${compareValue}: ${compareUptime}%`;
+                if (up) up.title = `${primaryValue || 'Period 1'}: ${uptimeRate}% | ${compareValue}: ${compareUptime}%`;
+            } else {
+                ['summary-availability-compare','summary-calib-compare','summary-uptime-compare','summary-projects-compare'].forEach(id => setCompareText(id,'',false));
+            }
 
-            // Render summary charts. Keep the Pareto source logs shared with Uptime / Downtime.
-            window._summaryPrimaryDt = filteredDt;
-            window._summaryCompareDt = isCompare ? comparisonDt : [];
-            renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, sortedLinePareto, currentPlant, paretoComparison, isCompare ? compareDone : null, isCompare ? Math.max(0, compareScheduled - compareDone) : null, compareProjectByPlant, isCompare ? compareValue : null);
+
+            // Render summary charts. Project and calibration charts compare both selected periods.
+            // A chart failure must never stop supporting details/KPIs from rendering.
+            try {
+                renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, sortedLinePareto, currentPlant, paretoComparison, isCompare ? compareDone : null, isCompare ? Math.max(0, compareScheduled - compareDone) : null, compareProjectByPlant, isCompare ? compareValue : null, filteredDt, comparisonDt);
+            } catch (chartError) {
+                console.error("Executive Summary chart render error:", chartError);
+                renderSummaryChartsFallbackSafe(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, sortedLinePareto, currentPlant, paretoComparison, isCompare ? compareDone : null, isCompare ? Math.max(0, compareScheduled - compareDone) : null, compareProjectByPlant, isCompare ? compareValue : null, filteredDt, comparisonDt);
+            }
         }
+
+        // Last-resort recovery: if any unrelated Executive Summary calculation throws,
+        // restore the charts and project supporting details from the current dashboard state.
+        window.addEventListener('error', function(ev){
+            if (window._summaryRecoveryRunning) return;
+            const msg=String(ev?.message||'');
+            if (!msg) return;
+            setTimeout(()=>{
+                try {
+                    if (!document.getElementById('summary-pareto-native')) return;
+                    const f=document.getElementById('summary-filter-type')?.value||'all';
+                    const y=document.getElementById('summary-year-filter')?.value||'';
+                    const m=document.getElementById('summary-month-filter')?.value||'';
+                    const cy=document.getElementById('summary-compare-year')?.value||'';
+                    const cm=document.getElementById('summary-compare-month')?.value||'';
+                    const cmp=f==='compare-year'||f==='compare-month';
+                    const typ=f==='compare-year'?'year':f==='compare-month'?'month':f;
+                    const cv=typ==='year'?y:m, ctyp=f==='compare-year'?'year':'month', ccv=f==='compare-year'?cy:cm;
+                    const match=(d,t,v)=>!d||t==='all'||!v||checkDateMatchFilter(d,t,t==='year'?v:'',t==='month'?v:'');
+                    const dt1=(downtimeLogs||[]).filter(x=>(currentPlant==='ALL'||normalizePlant(x.plant)===normalizePlant(currentPlant))&&match(x.start,typ,cv));
+                    const dt2=cmp?(downtimeLogs||[]).filter(x=>(currentPlant==='ALL'||normalizePlant(x.plant)===normalizePlant(currentPlant))&&match(x.start,ctyp,ccv)):[];
+                    const eq1=(equipmentList||[]).filter(x=>(currentPlant==='ALL'||normalizePlant(x.plant)===normalizePlant(currentPlant))&&([x.extSched,x.extCalib,x.intSched,x.intCalib].filter(Boolean).some(d=>match(d,typ,cv))||typ==='all'));
+                    const eq2=cmp?(equipmentList||[]).filter(x=>(currentPlant==='ALL'||normalizePlant(x.plant)===normalizePlant(currentPlant))&&([x.extSched,x.extCalib,x.intSched,x.intCalib].filter(Boolean).some(d=>match(d,ctyp,ccv))||ctyp==='all')):[];
+                    let d1=0,d2=0,s1=0,s2=0,done1=0,done2=0;
+                    const calcEq=(arr)=>{let s=0,d=0;arr.forEach(eq=>[getSubCalibStatus(eq.extSched,eq.extCalib),getSubCalibStatus(eq.intSched,eq.intCalib)].forEach(st=>{if(st==='NA')return;s++;if(st==='DONE'||st==='OVERDUE, DONE')d++;}));return{s,d};};
+                    const q1=calcEq(eq1),q2=calcEq(eq2); s1=q1.s;done1=q1.d;s2=q2.s;done2=q2.d;
+                    dt1.forEach(x=>{const z=(new Date(x.end)-new Date(x.start))/3600000;if(z>0)d1+=z;});dt2.forEach(x=>{const z=(new Date(x.end)-new Date(x.start))/3600000;if(z>0)d2+=z;});
+                    const u1=Math.max(0,Math.min(100,(1-d1/(Math.max(1,dt1.length)*720))*100));
+                    const u2=Math.max(0,Math.min(100,(1-d2/(Math.max(1,dt2.length)*720))*100));
+                    const set=(id,t,show)=>{const e=document.getElementById(id);if(e){e.textContent=t;e.classList.toggle('hidden',!show);}};
+                    if(cmp){set('summary-availability-compare',`${cv||'Date 1'}: ${u1.toFixed(1)}% | ${ccv||'Date 2'}: ${u2.toFixed(1)}%`,true);set('summary-calib-compare',`${cv||'Date 1'}: ${s1?Math.round(done1/s1*100):0}% | ${ccv||'Date 2'}: ${s2?Math.round(done2/s2*100):0}%`,true);set('summary-uptime-compare',`${cv||'Date 1'}: ${u1.toFixed(1)}% | ${ccv||'Date 2'}: ${u2.toFixed(1)}%`,true);}
+                    const pr1=(projectsList||[]).filter(x=>(currentPlant==='ALL'||normalizePlant(x.plant)===normalizePlant(currentPlant))&&match(x.date,typ,cv));
+                    const pr2=cmp?(projectsList||[]).filter(x=>(currentPlant==='ALL'||normalizePlant(x.plant)===normalizePlant(currentPlant))&&match(x.date,ctyp,ccv)):[];
+                    const p1={},p2={};['Plant 1','Plant 2','PreMix'].forEach(p=>{p1[p]={'In Progress':0,Planning:0,'On Hold':0,Completed:0};p2[p]={'In Progress':0,Planning:0,'On Hold':0,Completed:0};});
+                    pr1.forEach(x=>{const p=normalizePlant(x.plant),st=String(x.status||'Planning').trim();if(p1[p]&&st in p1[p])p1[p][st]++;});pr2.forEach(x=>{const p=normalizePlant(x.plant),st=String(x.status||'Planning').trim();if(p2[p]&&st in p2[p])p2[p][st]++;});
+                    const ps=document.getElementById('summary-per-plant-projects');if(ps){ps.innerHTML=(cmp?`<div class="grid grid-cols-9 gap-1 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span class="text-center">IP</span><span class="text-center">Plan</span><span class="text-center">Hold</span><span class="text-center">Done</span><span class="text-center">IP</span><span class="text-center">Plan</span><span class="text-center">Hold</span><span class="text-center">Done</span></div>`:`<div class="grid grid-cols-5 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>`)+['Plant 1','Plant 2','PreMix'].map(p=>cmp?`<div class="grid grid-cols-9 gap-1 items-center text-[10px] py-1.5 border-b border-slate-700/30"><span class="font-semibold text-white">${p}</span><b class="text-center text-blue-400">${p1[p]['In Progress']}</b><b class="text-center text-amber-400">${p1[p].Planning}</b><b class="text-center text-red-400">${p1[p]['On Hold']}</b><b class="text-center text-emerald-400">${p1[p].Completed}</b><b class="text-center text-blue-400">${p2[p]['In Progress']}</b><b class="text-center text-amber-400">${p2[p].Planning}</b><b class="text-center text-red-400">${p2[p]['On Hold']}</b><b class="text-center text-emerald-400">${p2[p].Completed}</b></div>`:`<div class="grid grid-cols-5 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30"><span class="font-semibold text-white">${p}</span><b class="text-center text-blue-400">${p1[p]['In Progress']}</b><b class="text-center text-amber-400">${p1[p].Planning}</b><b class="text-center text-red-400">${p1[p]['On Hold']}</b><b class="text-center text-emerald-400">${p1[p].Completed}</b></div>`).join('');}
+                    const makeLineItems=(logs)=>{const m={};(logs||[]).forEach(x=>{const line=String(x.line||'Unclassified Line').trim().replace(/\s+/g,' '),d=(new Date(x.end)-new Date(x.start))/3600000;if(d<=0)return;m[line]=(m[line]||0)+d;});return Object.entries(m).map(([line,duration])=>({line,duration})).sort((a,b)=>b.duration-a.duration);}; const line1=makeLineItems(dt1), line2=makeLineItems(dt2); window._summaryRecoveryRunning=true;forceNativeExecutiveSummaryCharts(done1,Math.max(0,s1-done1),p1,currentPlant,cmp?{primaryLabel:cv||'Date 1',compareLabel:ccv||'Date 2'}:null,done2,Math.max(0,s2-done2),p2,ccv,dt1,dt2,line1);window._summaryRecoveryRunning=false;
+                }catch(e){console.error('Summary recovery error',e);window._summaryRecoveryRunning=false;}
+            },50);
+        });
 
         // Chart.js loader: keep Executive Summary charts working even if the primary CDN
         // is slow or temporarily unavailable (common on some browsers/networks).
@@ -3645,16 +3765,16 @@ window.addEventListener("cloudsync:status", (event) => {
             }
             return svg+'</svg>';
         }
-        function summaryDoughnut(done, remaining, compareDone, compareRemaining, compare) {
+        function summaryDoughnut(done, remaining, compareDone, compareRemaining, compare, period1Label, period2Label) {
             const w=520,h=190,cx=100,cy=88,r=58,stroke=24,total=Math.max(1,done+remaining);
             const circ=2*Math.PI*r, doneLen=circ*(done/total);
             let svg=`<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" role="img" aria-label="Calibration status breakdown">`;
             if (compare) {
                 const t2=Math.max(1,compareDone+compareRemaining), c2=2*Math.PI*r, d2=c2*(compareDone/t2);
-                svg += `<text x="70" y="18" text-anchor="middle" font-size="9" fill="#94a3b8">${summarySvgEscape('Period 1')}</text><circle cx="70" cy="88" r="42" fill="none" stroke="#334155" stroke-width="18"/><circle cx="70" cy="88" r="42" fill="none" stroke="#22c55e" stroke-width="18" stroke-dasharray="${(2*Math.PI*42*(done/t1Safe(done,remaining))).toFixed(1)} ${2*Math.PI*42}" transform="rotate(-90 70 88)"/>`;
-                svg += `<text x="205" y="18" text-anchor="middle" font-size="9" fill="#94a3b8">${summarySvgEscape('Period 2')}</text><circle cx="205" cy="88" r="42" fill="none" stroke="#334155" stroke-width="18"/><circle cx="205" cy="88" r="42" fill="none" stroke="#22c55e" stroke-width="18" stroke-dasharray="${(2*Math.PI*42*(compareDone/t2)).toFixed(1)} ${2*Math.PI*42}" transform="rotate(-90 205 88)"/>`;
+                svg += `<text x="70" y="18" text-anchor="middle" font-size="9" fill="#94a3b8">${summarySvgEscape(period1Label || 'Period 1')}</text><circle cx="70" cy="88" r="42" fill="none" stroke="#334155" stroke-width="18"/><circle cx="70" cy="88" r="42" fill="none" stroke="#22c55e" stroke-width="18" stroke-dasharray="${(2*Math.PI*42*(done/t1Safe(done,remaining))).toFixed(1)} ${2*Math.PI*42}" transform="rotate(-90 70 88)"/>`;
+                svg += `<text x="205" y="18" text-anchor="middle" font-size="9" fill="#94a3b8">${summarySvgEscape(period2Label || 'Period 2')}</text><circle cx="205" cy="88" r="42" fill="none" stroke="#334155" stroke-width="18"/><circle cx="205" cy="88" r="42" fill="none" stroke="#22c55e" stroke-width="18" stroke-dasharray="${(2*Math.PI*42*(compareDone/t2)).toFixed(1)} ${2*Math.PI*42}" transform="rotate(-90 205 88)"/>`;
                 svg += `<text x="70" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#e2e8f0">${done}/${done+remaining}</text><text x="205" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#e2e8f0">${compareDone}/${compareDone+compareRemaining}</text>`;
-                svg += `<text x="330" y="58" font-size="9" fill="#22c55e">● DONE</text><text x="330" y="78" font-size="9" fill="#94a3b8">● REMAINING</text><text x="330" y="108" font-size="9" fill="#94a3b8">Period 1: ${done}</text><text x="330" y="126" font-size="9" fill="#94a3b8">Period 2: ${compareDone}</text>`;
+                svg += `<text x="330" y="58" font-size="9" fill="#22c55e">● DONE</text><text x="330" y="78" font-size="9" fill="#94a3b8">● REMAINING</text><text x="330" y="108" font-size="9" fill="#94a3b8">${summarySvgEscape(period1Label || 'Period 1')}: ${done}</text><text x="330" y="126" font-size="9" fill="#94a3b8">${summarySvgEscape(period2Label || 'Period 2')}: ${compareDone}</text>`;
             } else {
                 svg += `<circle cx="100" cy="88" r="58" fill="none" stroke="#334155" stroke-width="24"/><circle cx="100" cy="88" r="58" fill="none" stroke="#22c55e" stroke-width="24" stroke-dasharray="${doneLen} ${circ}" transform="rotate(-90 100 88)"/>`;
                 svg += `<text x="100" y="84" text-anchor="middle" font-size="18" font-weight="800" fill="#e2e8f0">${done}</text><text x="100" y="101" text-anchor="middle" font-size="9" fill="#94a3b8">DONE</text>`;
@@ -3663,224 +3783,136 @@ window.addEventListener("cloudsync:status", (event) => {
             return svg+'</svg>';
         }
         function t1Safe(done,remaining){ return Math.max(1,done+remaining); }
-        // Shared Pareto logic used by Executive Summary and Uptime / Downtime.
-        // Ranking is always by LINE total downtime. Equipment + failure category identify
-        // the highest contributor inside each ranked line.
-        function buildParetoLineItems(logs) {
-            const lineMap = {};
-            (logs || []).forEach(dt => {
-                const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
-                const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
-                const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
-                if (!lineMap[line]) lineMap[line] = { line, duration: 0, contributors: {} };
-                lineMap[line].duration += dur;
-                const key = `${equipment}|||${category}`;
-                if (!lineMap[line].contributors[key]) lineMap[line].contributors[key] = { equipment, category, duration: 0 };
-                lineMap[line].contributors[key].duration += dur;
-            });
-            return Object.values(lineMap).map(item => {
-                const top = Object.values(item.contributors).sort((a,b) => b.duration - a.duration)[0];
-                return { line: item.line, duration: item.duration, equipment: top?.equipment || '—', category: top?.category || '—' };
-            }).sort((a,b) => b.duration - a.duration);
-        }
-
-        function buildTop3OtherPareto(items) {
-            const source = items || [];
-            const top = source.slice(0, 3).map((item, index) => ({
-                rank: index + 1,
-                bucket: item.equipment || 'Unspecified Equipment',
-                line: item.line || 'Unclassified Line',
-                duration: Number(item.duration || 0),
-                equipment: item.equipment || '—',
-                category: item.category || '—',
-                equipmentList: item.equipment ? [item.equipment] : [],
-                lineList: item.line ? [item.line] : []
-            }));
-            const remaining = source.slice(3);
-            const otherHours = remaining.reduce((sum, item) => sum + Number(item.duration || 0), 0);
-            const otherEquipment = [...new Set(remaining.map(item => item.equipment).filter(Boolean))];
-            const otherLines = [...new Set(remaining.map(item => item.line).filter(Boolean))];
-            const otherCategories = [...new Set(remaining.map(item => item.category).filter(Boolean))];
-            if (remaining.length) top.push({
-                rank: 4,
-                bucket: 'Other',
-                line: otherLines.length ? otherLines.join(', ') : 'All remaining lines',
-                duration: otherHours,
-                equipment: otherEquipment.length ? otherEquipment.join(', ') : 'All remaining equipment',
-                category: otherCategories.length ? otherCategories.join(', ') : 'All remaining failure categories',
-                equipmentList: otherEquipment,
-                lineList: otherLines,
-                categoryList: otherCategories
-            });
-            while (top.length < 4) top.push({ rank: top.length + 1, bucket: top.length === 3 ? 'Other' : 'No data', line: 'No data', duration: 0, equipment: '—', category: '—', equipmentList: [], lineList: [] });
-            return top.slice(0, 4);
-        }
-
-        function renderIdenticalParetoChart(canvasId, primaryLogs, compareLogs, primaryLabel, compareLabel, chartRefName) {
-            const canvas = document.getElementById(canvasId);
-            if (!canvas || typeof Chart === 'undefined') return;
-            const primaryItems = buildTop3OtherPareto(buildParetoLineItems(primaryLogs));
-            const compareItems = buildTop3OtherPareto(buildParetoLineItems(compareLogs || []));
-            const isCompare = Array.isArray(compareLogs) && compareLogs.length >= 0 && !!compareLabel;
-                        const pTotal = primaryItems.reduce((sum, item) => sum + Number(item.duration || 0), 0);
-            const cTotal = compareItems.reduce((sum, item) => sum + Number(item.duration || 0), 0);
-            const noteId = canvasId === 'chart-summary-pareto' ? 'summary-pareto-note' : 'dt-pareto-note';
-            const note = document.getElementById(noteId);
-            if (note) {
-                const describe = arr => arr.slice(0, 3).map(i => `${i.equipment}: ${i.line} (${Number(i.duration || 0).toFixed(1)} hrs)`).join('  •  ');
-                note.innerHTML = isCompare ? `${summarySvgEscape(primaryLabel || 'Date 1')}: ${summarySvgEscape(describe(primaryItems))}<br>${summarySvgEscape(compareLabel || 'Date 2')}: ${summarySvgEscape(describe(compareItems))}` : summarySvgEscape(describe(primaryItems));
-            }
-            let pCum = 0, cCum = 0;
-            const pCumPct = primaryItems.map(item => { pCum += pTotal ? (item.duration / pTotal) * 100 : 0; return Number(pCum.toFixed(1)); });
-            const cCumPct = compareItems.map(item => { cCum += cTotal ? (item.duration / cTotal) * 100 : 0; return Number(cCum.toFixed(1)); });
-            if (chartRefName === 'summary') { if (chartSummaryPareto) chartSummaryPareto.destroy(); } else { if (chartDowntimePareto) chartDowntimePareto.destroy(); }
-            const datasets = isCompare ? [
-                { label: primaryLabel || 'Date 1', data: primaryItems.map(i => Number(i.duration.toFixed(1))), backgroundColor: '#ef4444', borderRadius: 5, order: 2, _paretoItems: primaryItems },
-                { label: compareLabel || 'Date 2', data: compareItems.map(i => Number(i.duration.toFixed(1))), backgroundColor: '#3b82f6', borderRadius: 5, order: 2, _paretoItems: compareItems },
-                { type: 'line', label: `${primaryLabel || 'Date 1'} Cumulative %`, data: pCumPct, borderColor: '#f97316', backgroundColor: '#f97316', borderWidth: 2.5, pointRadius: 3, tension: .2, yAxisID: 'y1', order: 1 },
-                { type: 'line', label: `${compareLabel || 'Date 2'} Cumulative %`, data: cCumPct, borderColor: '#22c55e', backgroundColor: '#22c55e', borderWidth: 2.5, borderDash: [6,4], pointRadius: 3, tension: .2, yAxisID: 'y1', order: 1 }
-            ] : [
-                { label: primaryLabel || 'Downtime (hrs)', data: primaryItems.map(i => Number(i.duration.toFixed(1))), backgroundColor: '#ef4444', borderRadius: 5, order: 2, _paretoItems: primaryItems },
-                { type: 'line', label: 'Cumulative %', data: pCumPct, borderColor: '#f97316', backgroundColor: '#f97316', borderWidth: 2.5, pointRadius: 3, tension: .2, yAxisID: 'y1', order: 1 }
-            ];
-            const chart = new Chart(canvas.getContext('2d'), {
-                type: 'bar',
-                data: { labels: primaryItems.map((item, idx) => item.bucket || (idx === 3 ? 'Other' : 'Unspecified Equipment')), datasets },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
-                        tooltip: {
-                            callbacks: {
-                                title: items => {
-                                    const bucket = items?.[0]?.label || '';
-                                    const idx = items?.[0]?.dataIndex ?? 0;
-                                    const dataset = items?.[0]?.dataset;
-                                    const item = dataset?._paretoItems?.[idx] || primaryItems[idx];
-                                    return `${bucket} — ${item?.line || 'No data'}`;
-                                },
-                                label: ctx => {
-                                    if (String(ctx.dataset.label || '').includes('Cumulative %')) return `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%`;
-                                    const item = ctx.dataset._paretoItems?.[ctx.dataIndex];
-                                    return `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)} hrs | Equipment: ${item?.equipment || '—'} | Failure: ${item?.category || '—'}`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: { ticks: { font: { size: 10, weight: '600' }, color: '#cbd5e1' }, grid: { display: false } },
-                        y: { beginAtZero: true, title: { display: true, text: 'Downtime (hrs)', color: '#94a3b8', font: { size: 10 } }, ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { color: 'rgba(51,65,85,.4)' } },
-                        y1: { beginAtZero: true, min: 0, max: 100, position: 'right', title: { display: true, text: 'Cumulative %', color: '#94a3b8', font: { size: 10 } }, ticks: { font: { size: 9 }, color: '#94a3b8', callback: value => `${value}%` }, grid: { drawOnChartArea: false } }
-                    }
-                }
-            });
-            if (chartRefName === 'summary') chartSummaryPareto = chart; else chartDowntimePareto = chart;
-        }
-
-        // Native Pareto renderer: keeps the graph visible even when Chart.js/CDNs are unavailable.
-        // Uses the exact same Top 3 + Other data and colors as the interactive Chart.js version.
-        function renderNativeParetoChart(canvasId, primaryLogs, compareLogs, primaryLabel, compareLabel, noteId) {
-            const canvas = document.getElementById(canvasId);
-            if (!canvas || !canvas.parentElement) return;
-            const hostParent = canvas.parentElement;
-            canvas.style.display = 'none';
-            let host = hostParent.querySelector('.native-pareto-chart');
-            if (!host) {
-                host = document.createElement('div');
-                host.className = 'native-pareto-chart w-full';
-                hostParent.appendChild(host);
-            }
-            host.style.display = 'block';
-            host.style.width = '100%';
-            host.style.minHeight = '300px';
-            host.style.height = '300px';
-            const pItems = buildTop3OtherPareto(buildParetoLineItems(primaryLogs || []));
-            const cItems = buildTop3OtherPareto(buildParetoLineItems(compareLogs || []));
-            const isCompare = !!compareLabel;
-            const pTotal = pItems.reduce((a,x)=>a+Number(x.duration||0),0);
-            const cTotal = cItems.reduce((a,x)=>a+Number(x.duration||0),0);
-            let pCum=0,cCum=0;
-            const pPct=pItems.map(x=>{pCum += pTotal ? Number(x.duration||0)/pTotal*100 : 0; return pCum;});
-            const cPct=cItems.map(x=>{cCum += cTotal ? Number(x.duration||0)/cTotal*100 : 0; return cCum;});
-            const W=900,H=270,L=55,R=55,T=18,B=72,plotW=W-L-R,plotH=H-T-B;
-            const max=Math.max(1,...pItems.map(x=>Number(x.duration||0)),...(isCompare?cItems.map(x=>Number(x.duration||0)):[]));
-            const groupW=plotW/4, barW=isCompare?Math.min(44,groupW*.22):Math.min(58,groupW*.34);
-            const y=v=>T+plotH-(v/max)*plotH, py=v=>T+plotH-(v/100)*plotH;
-            let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="270" role="img" aria-label="Downtime Pareto by specific equipment" style="display:block">`;
-            for(let i=0;i<=4;i++){const yy=T+plotH-(plotH*i/4),vv=max*i/4;svg+=`<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#334155" stroke-width="1" opacity=".45"/><text x="${L-7}" y="${yy+4}" text-anchor="end" font-size="10" fill="#94a3b8">${vv.toFixed(1)}</text>`;}
-            for(let i=0;i<=5;i++){const yy=T+plotH-(plotH*i/5);svg+=`<text x="${W-R+7}" y="${yy+4}" font-size="9" fill="#94a3b8">${i*20}%</text>`;}
-            const pointsP=[],pointsC=[];
-            pItems.forEach((item,i)=>{
-                const cx=L+groupW*i+groupW/2;
-                const pv=Number(item.duration||0), ph=(pv/max)*plotH, px=isCompare?cx-barW-5:cx-barW/2;
-                svg+=`<rect x="${px.toFixed(1)}" y="${y(pv).toFixed(1)}" width="${barW}" height="${Math.max(0,ph).toFixed(1)}" rx="5" fill="#ef4444"><title>${escapeHtml(item.bucket+' — '+item.line+' | Equipment: '+item.equipment+' | Failure: '+item.category+' | '+pv.toFixed(1)+' hrs')}</title></rect>`;
-                if(pv>0)svg+=`<text x="${(px+barW/2).toFixed(1)}" y="${Math.max(14,y(pv)-5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${pv.toFixed(1)}</text>`;
-                pointsP.push(`${cx},${py(pPct[i])}`);
-                if(isCompare){
-                    const ci=cItems[i]||{duration:0,equipment:'—',line:'No data',category:'—'},cv=Number(ci.duration||0),ch=(cv/max)*plotH,cx2=cx+5;
-                    svg+=`<rect x="${cx2.toFixed(1)}" y="${y(cv).toFixed(1)}" width="${barW}" height="${Math.max(0,ch).toFixed(1)}" rx="5" fill="#3b82f6"><title>${escapeHtml(ci.bucket+' — '+ci.line+' | Equipment: '+ci.equipment+' | Failure: '+ci.category+' | '+cv.toFixed(1)+' hrs')}</title></rect>`;
-                    if(cv>0)svg+=`<text x="${(cx2+barW/2).toFixed(1)}" y="${Math.max(14,y(cv)-5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${cv.toFixed(1)}</text>`;
-                    pointsC.push(`${cx+barW/2+5},${py(cPct[i])}`);
-                }
-                const pEquip = String(item.equipment || item.bucket || '—');
-                const cEquip = String((cItems[i] && cItems[i].equipment) || '—');
-                const pShort = pEquip.length>22 ? pEquip.slice(0,21)+'…' : pEquip;
-                const cShort = cEquip.length>22 ? cEquip.slice(0,21)+'…' : cEquip;
-                svg+=`<text x="${cx}" y="${H-49}" text-anchor="middle" font-size="9" font-weight="700" fill="#e2e8f0">${escapeHtml(pShort)}</text>`;
-                svg+=`<text x="${cx}" y="${H-35}" text-anchor="middle" font-size="8" fill="#94a3b8">${escapeHtml(item.line || '—')}</text>`;
-                if(isCompare) svg+=`<text x="${cx}" y="${H-21}" text-anchor="middle" font-size="7.5" fill="#60a5fa">vs ${escapeHtml(cShort)}</text>`;
-            });
-            svg+=`<polyline points="${pointsP.join(' ')}" fill="none" stroke="#f97316" stroke-width="2.5"/>`;
-            pointsP.forEach(pt=>{const [xv,yv]=pt.split(',');svg+=`<circle cx="${xv}" cy="${yv}" r="3" fill="#f97316"/>`;});
-            if(isCompare){svg+=`<polyline points="${pointsC.join(' ')}" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-dasharray="6 4"/>`;pointsC.forEach(pt=>{const [xv,yv]=pt.split(',');svg+=`<circle cx="${xv}" cy="${yv}" r="3" fill="#22c55e"/>`;});}
-            svg+=`<text x="${L}" y="12" font-size="9" fill="#94a3b8">Downtime (hrs)</text><text x="${W-R}" y="12" text-anchor="end" font-size="9" fill="#94a3b8">Cumulative %</text>`;
-            svg+=`<g transform="translate(${L},${H-7})"><rect width="10" height="10" rx="2" fill="#ef4444"/><text x="14" y="9" font-size="8.5" fill="#94a3b8">${summarySvgEscape(primaryLabel||'Date 1')}</text>`;
-            if(isCompare){const off=145+String(primaryLabel||'Date 1').length*4.8;svg+=`<rect x="${off}" width="10" height="10" rx="2" fill="#3b82f6"/><text x="${off+14}" y="9" font-size="8.5" fill="#94a3b8">${summarySvgEscape(compareLabel)}</text><rect x="${off+125}" width="10" height="10" rx="2" fill="#f97316"/><text x="${off+139}" y="9" font-size="8.5" fill="#94a3b8">Cumulative ${summarySvgEscape(primaryLabel||'Date 1')}</text><rect x="${off+275}" width="10" height="10" rx="2" fill="#22c55e"/><text x="${off+289}" y="9" font-size="8.5" fill="#94a3b8">Cumulative ${summarySvgEscape(compareLabel)}</text>`;}
-            else svg+=`<rect x="${145+String(primaryLabel||'Date 1').length*4.8}" width="10" height="10" rx="2" fill="#f97316"/><text x="${159+String(primaryLabel||'Date 1').length*4.8}" y="9" font-size="8.5" fill="#94a3b8">Cumulative %</text>`;
-            svg+='</g></svg>';
-            const details = (label, arr) => arr.map((i,idx)=>`<div style="padding:4px 7px;border-bottom:1px solid rgba(51,65,85,.35)"><b style="color:#e2e8f0">${idx<3?'Top '+(idx+1):'Other'}:</b> <span style="color:#f8fafc">${escapeHtml(i.equipment||'—')}</span> <span style="color:#94a3b8">| ${escapeHtml(i.line||'—')} | ${Number(i.duration||0).toFixed(1)} hrs</span></div>`).join('');
-            host.innerHTML = svg + `<div style="margin-top:3px;font-size:9px;line-height:1.35;color:#94a3b8;border-top:1px solid rgba(51,65,85,.4)">${details(primaryLabel||'Date 1',pItems)}${isCompare?details(compareLabel,cItems):''}</div>`;
-            const note=document.getElementById(noteId); if(note){const desc=a=>a.map(i=>`${i.equipment||'—'} (${i.line||'—'})`).join(' • ');note.innerHTML=isCompare?`${summarySvgEscape(primaryLabel||'Date 1')}: ${summarySvgEscape(desc(pItems))}<br>${summarySvgEscape(compareLabel)}: ${summarySvgEscape(desc(cItems))}`:summarySvgEscape(desc(pItems));}
-        }
-
-        function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel) {
-            // Render Pareto first and independently so it remains visible even if another chart helper fails.
+        function renderSummaryChartsFallbackSafe(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel, primaryDowntimeLogs, compareDowntimeLogs) {
             try {
-                renderNativeParetoChart('chart-summary-pareto', window._summaryPrimaryDt || [], window._summaryCompareDt || [], paretoComparison?.primaryLabel || 'Selected Period', paretoComparison ? (comparePeriodLabel || paretoComparison.compareLabel || 'Comparison') : '', 'summary-pareto-note');
-            } catch (e) { console.warn('Summary Pareto render failed:', e); }
-            const setChartHost=(id,html)=>{ const c=document.getElementById(id); if(!c?.parentElement)return; c.style.display='none'; let h=c.parentElement.querySelector('.summary-native-chart'); if(!h){h=document.createElement('div');h.className='summary-native-chart w-full';h.style.height='220px';c.parentElement.appendChild(h);} h.innerHTML=html; };
-            const period1=paretoComparison?.primaryLabel||'Selected Period', period2=comparePeriodLabel||paretoComparison?.compareLabel||'Comparison';
-            const calibChartHtml = paretoComparison
-                ? summaryBarChart(
-                    ['DONE','REMAINING'],
-                    [
-                        {label: period1, data:[Number(cDone)||0, Number(cRemaining)||0], color:'#22c55e'},
-                        {label: period2, data:[Number(compareDone)||0, Number(compareRemaining)||0], color:'#3b82f6'}
-                    ],
-                    {title:'Calibration status comparison', legend:[{label:period1,color:'#22c55e'},{label:period2,color:'#3b82f6'}], decimals:0}
-                  )
-                : summaryDoughnut(Number(cDone)||0,Number(cRemaining)||0,0,0,false);
-            setChartHost('chart-summary-calib',calibChartHtml);
-            const plants=selectedPlant&&selectedPlant!=='ALL'?['Plant 1','Plant 2','PreMix'].filter(p=>normalizePlant(p)===normalizePlant(selectedPlant)):['Plant 1','Plant 2','PreMix'];
-            const projectSeries=[
-                {key:'In Progress',color:'#3b82f6'},{key:'Planning',color:'#eab308'},{key:'On Hold',color:'#ef4444'},{key:'Completed',color:'#22c55e'}
-            ];
-            let projectSvg='';
-            if(paretoComparison){
-                const labels=plants.map(p=>p==='PreMix'?'PreMix Plant':p), series=[];
-                projectSeries.forEach((s)=>{series.push({label:`${period1} ${s.key}`,data:plants.map(p=>Number(projectByPlant?.[p]?.[s.key]||0)),color:s.color});series.push({label:`${period2} ${s.key}`,data:plants.map(p=>Number(compareProjectByPlant?.[p]?.[s.key]||0)),color:s.color});});
-                projectSvg=summaryBarChart(labels,series,{title:'Project status comparison',legend:series.map(s=>({label:s.label,color:s.color})),decimals:0});
-            }else{
-                const labels=plants.map(p=>p==='PreMix'?'PreMix Plant':p),series=projectSeries.map(s=>({label:s.key,data:plants.map(p=>Number(projectByPlant?.[p]?.[s.key]||0)),color:s.color}));
-                projectSvg=summaryBarChart(labels,series,{title:'Project status',legend:series.map(s=>({label:s.label,color:s.color})),decimals:0});
-            }
-            setChartHost('chart-summary-projects',projectSvg);
-            const rows=[]; const pm={}; (sortedLinePareto||[]).forEach(i=>pm[i.line]={p:Number(i.duration)||0,c:0}); (paretoComparison?.compare||[]).forEach(i=>{if(!pm[i.line])pm[i.line]={p:0,c:0};pm[i.line].c=Number(i.duration)||0;});
-            Object.entries(pm).sort((a,b)=>(b[1].p+b[1].c)-(a[1].p+a[1].c)).forEach(([line,v])=>rows.push({line,p:Number(v.p.toFixed(1)),c:Number(v.c.toFixed(1))}));
-            const labels=rows.length?rows.map(x=>x.line):['No Data'];
-            const series=paretoComparison?[{label:period1,data:rows.map(x=>x.p),color:'#f59e0b'},{label:period2,data:rows.map(x=>x.c),color:'#3b82f6'}]:[{label:'Downtime (hrs)',data:rows.map(x=>x.p),color:'#f59e0b'}];
+                const setHost=(id,html)=>{const c=document.getElementById(id),h=c?.parentElement;if(!h)return;c.style.display='none';let f=h.querySelector('.summary-native-chart');if(!f){f=document.createElement('div');f.className='summary-native-chart w-full';f.style.cssText='display:block!important;width:100%;height:175px;min-height:175px;';h.appendChild(f);}f.innerHTML=html;f.style.display='block';};
+                const p1=paretoComparison?.primaryLabel||'Selected Period', p2=comparePeriodLabel||paretoComparison?.compareLabel||'Comparison', has=!!paretoComparison;
+                if(has){
+                    const cv1=Math.max(0,Number(cDone)||0), rv1=Math.max(0,Number(cRemaining)||0), cv2=Math.max(0,Number(compareDone)||0), rv2=Math.max(0,Number(compareRemaining)||0), ymax=Math.max(1,cv1+rv1,cv2+rv2), w=520,h=175,l=42,r=16,t=12,b=42,ph=h-t-b,base=t+ph,bw=70;
+                    let cs=`<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%"><line x1="${l}" y1="${base}" x2="${w-r}" y2="${base}" stroke="#475569"/>`;
+                    [p1,p2].forEach((lab,i)=>{const total=i===0?cv1+rv1:cv2+rv2,done=i===0?cv1:cv2,rem=i===0?rv1:rv2,x=i===0?190:330,bh=total/ymax*ph,dh=done/ymax*ph,rh=rem/ymax*ph;cs+=`<rect x="${x-bw/2}" y="${base-bh}" width="${bw}" height="${bh}" fill="#334155" rx="3"/><rect x="${x-bw/2}" y="${base-dh}" width="${bw}" height="${dh}" fill="#22c55e" rx="3"/><text x="${x}" y="${h-23}" text-anchor="middle" font-size="9" fill="#94a3b8">${summarySvgEscape(lab)}</text>`;});
+                    cs+=`<rect x="${l}" y="${h-10}" width="7" height="7" fill="#22c55e"/><text x="${l+11}" y="${h-3}" font-size="8" fill="#94a3b8">Completed</text><rect x="${l+78}" y="${h-10}" width="7" height="7" fill="#334155"/><text x="${l+89}" y="${h-3}" font-size="8" fill="#94a3b8">Remaining</text></svg>`;
+                    setHost('chart-summary-calib',cs);
+                } else setHost('chart-summary-calib',summaryDoughnut(Number(cDone)||0,Number(cRemaining)||0,Number(compareDone)||0,Number(compareRemaining)||0,false,p1,p2));
+                const plants=selectedPlant&&selectedPlant!=='ALL'?['Plant 1','Plant 2','PreMix'].filter(p=>normalizePlant(p)===normalizePlant(selectedPlant)):['Plant 1','Plant 2','PreMix'];
+                const sts=[{key:'In Progress',color:'#3b82f6'},{key:'Planning',color:'#eab308'},{key:'On Hold',color:'#ef4444'},{key:'Completed',color:'#22c55e'}];
+                const w=520,h=190,left=34,right=12,top=14,bottom=52,pw=w-left-right,ph=h-top-bottom;
+                const labels=has?plants.flatMap(p=>[`${p==='PreMix'?'PreMix Plant':p} — ${p1}`,`${p==='PreMix'?'PreMix Plant':p} — ${p2}`]):plants.map(p=>p==='PreMix'?'PreMix Plant':p);
+                const totals=labels.map((_,i)=>{const pi=Math.floor(i/(has?2:1)),cmp=has&&i%2===1;return sts.reduce((z,st)=>z+Number((cmp?compareProjectByPlant:projectByPlant)?.[plants[pi]]?.[st.key]||0),0);});
+                const ymax=Math.max(1,...totals), groupW=pw/Math.max(1,labels.length), barW=Math.max(8,groupW*.68); let svg=`<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%">`;
+                for(let i=0;i<=4;i++){const y=top+ph-(ph*i/4);svg+=`<line x1="${left}" y1="${y}" x2="${w-right}" y2="${y}" stroke="#334155" opacity=".45"/><text x="${left-4}" y="${y+3}" text-anchor="end" font-size="8" fill="#94a3b8">${Math.round(ymax*i/4)}</text>`;}
+                labels.forEach((lab,i)=>{const pi=Math.floor(i/(has?2:1)),cmp=has&&i%2===1,x=left+i*groupW+(groupW-barW)/2;let y=top+ph;sts.forEach(st=>{const v=Number((cmp?compareProjectByPlant:projectByPlant)?.[plants[pi]]?.[st.key]||0),bh=v/ymax*ph;y-=bh;svg+=`<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="2" fill="${st.color}"/>`;});const short=lab.length>17?lab.slice(0,17)+'…':lab;svg+=`<text x="${x+barW/2}" y="${h-27}" text-anchor="middle" font-size="7" fill="#94a3b8">${summarySvgEscape(short)}</text>`;});
+                let lx=left,ly=h-7;sts.forEach(st=>{svg+=`<rect x="${lx}" y="${ly-7}" width="7" height="7" fill="${st.color}"/><text x="${lx+10}" y="${ly}" font-size="7" fill="#94a3b8">${st.key}</text>`;lx+=55;}); setHost('chart-summary-projects',svg+'</svg>');
+                const buildTop3PlusOther=logs=>{const m={};(logs||[]).forEach(dt=>{const e=String(dt.equipment||'Unclassified Equipment').trim().replace(/\s+/g,' '),d=Math.max(0,(new Date(dt.end)-new Date(dt.start))/(1000*60*60));m[e]=(m[e]||0)+d;});const all=Object.entries(m).map(([equipment,duration])=>({equipment,duration})).sort((a,b)=>b.duration-a.duration);const total=all.reduce((z,x)=>z+x.duration,0),top=all.slice(0,3),other=Math.max(0,total-top.reduce((z,x)=>z+x.duration,0)),items=[...top,{equipment:'Other',duration:other}];let acc=0;items.forEach(x=>{acc+=x.duration;x.cumulativePercent=total?acc/total*100:0;});return {items,total};};
+                const fallbackPrimaryTotal=Array.isArray(sortedLinePareto)?sortedLinePareto.reduce((z,x)=>z+Number(x.duration||0),0):0;const fallbackCompareTotal=has&&Array.isArray(paretoComparison?.compare)?paretoComparison.compare.reduce((z,x)=>z+Number(x.duration||0),0):0;const aP=buildTop3PlusOther(primaryDowntimeLogs||[]);const bP=has?buildTop3PlusOther(compareDowntimeLogs||[]):{items:[],total:0};if(fallbackPrimaryTotal>0){aP.total=fallbackPrimaryTotal;let run=0;aP.items.forEach(x=>{run+=x.duration;x.cumulativePercent=run/fallbackPrimaryTotal*100;});if(aP.items.length)aP.items[aP.items.length-1].cumulativePercent=100;}if(fallbackCompareTotal>0){bP.total=fallbackCompareTotal;let run=0;bP.items.forEach(x=>{run+=x.duration;x.cumulativePercent=run/fallbackCompareTotal*100;});if(bP.items.length)bP.items[bP.items.length-1].cumulativePercent=100;}const a=aP.items,b=bP.items,labels3=[...new Set([...a.filter(x=>x.equipment!=='Other').map(x=>x.equipment),...b.filter(x=>x.equipment!=='Other').map(x=>x.equipment),'Other'])],am=Object.fromEntries(a.map(x=>[x.equipment,x.duration])),bm=Object.fromEntries(b.map(x=>[x.equipment,x.duration])),ac=Object.fromEntries(a.map(x=>[x.equipment,x.cumulativePercent])),bc=Object.fromEntries(b.map(x=>[x.equipment,x.cumulativePercent]));
+                const pw2=470,ph2=120,l2=42,r2=40,t2=12,b2=42,g=labels3.length?((pw2-l2-r2)/labels3.length):1,bw=Math.min(34,g*.28), maxv=Math.max(1,...labels3.map(x=>Math.max(am[x]||0,bm[x]||0))), pts1=[],pts2=[];let sv=`<svg viewBox="0 0 ${pw2} 190" width="100%" height="100%">`;
+                for(let i=0;i<=4;i++){const y=t2+ph2-(ph2*i/4);sv+=`<line x1="${l2}" y1="${y}" x2="${pw2-r2}" y2="${y}" stroke="#334155" opacity=".45"/><text x="${l2-4}" y="${y+3}" text-anchor="end" font-size="7" fill="#94a3b8">${(maxv*i/4).toFixed(1)}</text>`;}
+                labels3.forEach((lab,i)=>{const cx=l2+i*g+g/2,v1=am[lab]||0,v2=bm[lab]||0,y1=t2+ph2-v1/maxv*ph2,y2=t2+ph2-v2/maxv*ph2;if(has){sv+=`<rect x="${cx-bw}" y="${y1}" width="${bw-2}" height="${t2+ph2-y1}" fill="#f59e0b" rx="2"/><rect x="${cx+2}" y="${y2}" width="${bw-2}" height="${t2+ph2-y2}" fill="#3b82f6" rx="2"/>`; }else sv+=`<rect x="${cx-bw/2}" y="${y1}" width="${bw}" height="${t2+ph2-y1}" fill="#f59e0b" rx="2"/>`;if(ac[lab]!=null)pts1.push(`${cx},${t2+ph2-(ac[lab]/100)*ph2}`);if(bc[lab]!=null)pts2.push(`${cx},${t2+ph2-(bc[lab]/100)*ph2}`);sv+=`<text x="${cx}" y="${t2+ph2+17}" text-anchor="middle" font-size="7" fill="#94a3b8">${summarySvgEscape(lab.length>14?lab.slice(0,14)+'…':lab)}</text>`;});if(pts1.length)sv+=`<polyline points="${pts1.join(' ')}" fill="none" stroke="#f59e0b" stroke-width="2"/>`;if(pts2.length)sv+=`<polyline points="${pts2.join(' ')}" fill="none" stroke="#3b82f6" stroke-width="2"/>`;sv+=`<text x="${l2}" y="184" font-size="7" fill="#f59e0b">${p1} cumulative % • Total ${aP.total.toFixed(1)} hrs</text>`;if(has)sv+=`<text x="${l2+125}" y="184" font-size="7" fill="#3b82f6">${p2} cumulative % • Total ${bP.total.toFixed(1)} hrs</text>`;setHost('chart-summary-pareto',sv+'</svg>');
+            } catch(e){console.error('Executive Summary fallback chart error:',e);}
+        }
+
+        function renderSummaryParetoNative(primaryLogs, compareLogs, primaryLabel, compareLabel, linePrimaryItems, lineCompareItems) {
+            const host = document.getElementById('summary-pareto-native');
+            if (!host) return;
+            const clean = logs => {
+                const m = {};
+                (logs || []).forEach(dt => {
+                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g,' ');
+                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g,' ');
+                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g,' ');
+                    const d = Math.max(0,(new Date(dt.end)-new Date(dt.start))/(1000*60*60));
+                    if (d > 0) {
+                        const key = equipment + '|||' + line + '|||' + category;
+                        if (!m[key]) m[key] = {equipment,line,category,duration:0};
+                        m[key].duration += d;
+                    }
+                });
+                return Object.values(m).sort((a,b)=>b.duration-a.duration);
+            };
+            const aggregate = (logs, lineItems) => {
+                const all = clean(logs);
+                const lineTotals = {};
+                (lineItems || []).forEach(x => { lineTotals[x.line] = Number(x.duration||0); });
+                // Rank by line total, then identify the equipment contributing most to each line.
+                const rankedLines = Object.entries(lineTotals).sort((a,b)=>b[1]-a[1]).slice(0,3);
+                const items = rankedLines.map(([line,total]) => {
+                    const contributors = all.filter(x=>x.line===line).sort((a,b)=>b.duration-a.duration);
+                    const c = contributors[0] || {equipment:'No equipment recorded',category:'No failure category'};
+                    return {equipment:c.equipment,line,category:c.category,duration:total};
+                });
+                const totalAll = Object.values(lineTotals).reduce((a,b)=>a+b,0);
+                const topLines = new Set(rankedLines.map(x=>x[0]));
+                const otherLines = Object.entries(lineTotals).filter(([line])=>!topLines.has(line));
+                const otherHours = otherLines.reduce((a,[,v])=>a+v,0);
+                if (otherHours > 0 || items.length < 4) items.push({equipment: otherHours>0 ? 'Other equipment' : 'No additional equipment',line: otherHours>0 ? 'All remaining lines' : 'No additional lines',category:'All remaining failure categories',duration:otherHours});
+                let run=0; items.forEach(x=>{run+=x.duration;x.cumulative=totalAll>0?run/totalAll*100:0;});
+                return {items,total:totalAll};
+            };
+            const a=aggregate(primaryLogs,linePrimaryItems), b=compareLogs ? aggregate(compareLogs,lineCompareItems) : {items:[],total:0};
+            const labels=[...new Set([...a.items.map(x=>x.equipment),...b.items.map(x=>x.equipment)])];
+            const am=Object.fromEntries(a.items.map(x=>[x.equipment,x.duration])), bm=Object.fromEntries(b.items.map(x=>[x.equipment,x.duration]));
+            const ac=Object.fromEntries(a.items.map(x=>[x.equipment,x.cumulative])), bc=Object.fromEntries(b.items.map(x=>[x.equipment,x.cumulative]));
+            const ai=Object.fromEntries(a.items.map(x=>[x.equipment,x])), bi=Object.fromEntries(b.items.map(x=>[x.equipment,x]));
+            const W=620,H=235,L=48,R=44,T=18,B=66,PH=H-T-B,G=labels.length?((W-L-R)/labels.length):1,BW=Math.max(10,Math.min(30,G*.30)),maxV=Math.max(1,...labels.map(x=>Math.max(am[x]||0,bm[x]||0)));
+            let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" role="img" aria-label="Downtime Pareto comparison">`;
+            for(let i=0;i<=4;i++){const y=T+PH-(PH*i/4);svg+=`<line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}" stroke="#334155" opacity=".45"/><text x="${L-5}" y="${y+3}" text-anchor="end" font-size="8" fill="#94a3b8">${(maxV*i/4).toFixed(1)}</text>`;}
+            const p1=String(primaryLabel||'Date 1'),p2=String(compareLabel||'Date 2'),has=!!compareLogs;
+            labels.forEach((lab,i)=>{
+                const cx=L+i*G+G/2,v1=am[lab]||0,v2=bm[lab]||0,y1=T+PH-(v1/maxV)*PH,y2=T+PH-(v2/maxV)*PH;
+                if(has){svg+=`<rect x="${cx-BW}" y="${y1}" width="${BW-2}" height="${Math.max(0,T+PH-y1)}" rx="2" fill="#f59e0b"><title>${p1} — Equipment: ${summarySvgEscape(lab)} — Line: ${summarySvgEscape(ai[lab]?.line||'—')} — Failure: ${summarySvgEscape(ai[lab]?.category||'—')} — ${v1.toFixed(2)} hrs</title></rect>`;svg+=`<rect x="${cx+2}" y="${y2}" width="${BW-2}" height="${Math.max(0,T+PH-y2)}" rx="2" fill="#3b82f6"><title>${p2} — Equipment: ${summarySvgEscape(lab)} — Line: ${summarySvgEscape(bi[lab]?.line||'—')} — Failure: ${summarySvgEscape(bi[lab]?.category||'—')} — ${v2.toFixed(2)} hrs</title></rect>`;}else{svg+=`<rect x="${cx-BW/2}" y="${y1}" width="${BW}" height="${Math.max(0,T+PH-y1)}" rx="2" fill="#f59e0b"><title>Equipment: ${summarySvgEscape(lab)} — Line: ${summarySvgEscape(ai[lab]?.line||'—')} — Failure: ${summarySvgEscape(ai[lab]?.category||'—')} — ${v1.toFixed(2)} hrs</title></rect>`;}
+                if(v1>0)svg+=`<text x="${cx-BW/2}" y="${Math.max(12,y1-3)}" text-anchor="middle" font-size="7" fill="#fbbf24">${v1.toFixed(1)}</text>`;
+                if(has&&v2>0)svg+=`<text x="${cx+BW/2}" y="${Math.max(12,y2-3)}" text-anchor="middle" font-size="7" fill="#60a5fa">${v2.toFixed(1)}</text>`;
+                const short=lab.length>18?lab.slice(0,18)+'…':lab;svg+=`<text x="${cx}" y="${T+PH+16}" text-anchor="middle" font-size="7" fill="#e2e8f0">${summarySvgEscape(short)}</text>`;
+                const line=ai[lab]?.line||bi[lab]?.line||'—'; const shortLine=line.length>18?line.slice(0,18)+'…':line;svg+=`<text x="${cx}" y="${T+PH+28}" text-anchor="middle" font-size="6.5" fill="#94a3b8">${summarySvgEscape(shortLine)}</text>`;
+            });
+            const points1=labels.map((x,i)=>`${L+i*G+G/2},${T+PH-(ac[x]||0)/100*PH}`).join(' '); const points2=labels.map((x,i)=>`${L+i*G+G/2},${T+PH-(bc[x]||0)/100*PH}`).join(' ');
+            if(points1)svg+=`<polyline points="${points1}" fill="none" stroke="#f59e0b" stroke-width="2"/>`; if(has&&points2)svg+=`<polyline points="${points2}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 3"/>`;
+            svg+=`<text x="${L}" y="${H-8}" font-size="7" fill="#f59e0b">${summarySvgEscape(p1)} • ${a.total.toFixed(1)} hrs • cumulative</text>`;if(has)svg+=`<text x="${W/2+15}" y="${H-8}" font-size="7" fill="#3b82f6">${summarySvgEscape(p2)} • ${b.total.toFixed(1)} hrs • cumulative</text>`;
+            svg+=`</svg>`; host.innerHTML=svg;
+            const note=document.getElementById('summary-pareto-note'); if(note) note.textContent=has ? `Specific equipment + Line shown for both ${p1} and ${p2}; Other equipment represents all remaining lines.` : 'Specific equipment + Line shown for Top 3 lines; Other equipment represents all remaining lines.';
+        }
+
+        function forceNativeExecutiveSummaryCharts(cDone, cRemaining, projectByPlant, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel, primaryDowntimeLogs, compareDowntimeLogs, sortedLinePareto) {
+            try {
+                const p1 = paretoComparison?.primaryLabel || document.getElementById('summary-year-filter')?.value || 'Selected Period';
+                const p2 = comparePeriodLabel || paretoComparison?.compareLabel || 'Comparison';
+                const hasCompare = !!paretoComparison;
+                const calibHost = document.getElementById('chart-summary-calib-native');
+                const projHost = document.getElementById('chart-summary-projects-native');
+                const paretoHost = document.getElementById('summary-pareto-native');
+                if (calibHost) {
+                    if (hasCompare) {
+                        const aD=Number(cDone)||0,aR=Number(cRemaining)||0,bD=Number(compareDone)||0,bR=Number(compareRemaining)||0;
+                        const max=Math.max(1,aD+aR,bD+bR), W=520,H=200,L=52,R=20,T=20,B=45,PH=H-T-B;
+                        let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" role="img" aria-label="Calibration status comparison">`;
+                        for(let i=0;i<=4;i++){const y=T+PH-(PH*i/4);svg+=`<line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}" stroke="#334155" opacity=".45"/><text x="${L-5}" y="${y+3}" text-anchor="end" font-size="8" fill="#94a3b8">${Math.round(max*i/4)}</text>`;}
+                        [[p1,aD,aR,170],[p2,bD,bR,350]].forEach(([lab,d,r,x])=>{const total=d+r,dh=d/max*PH,rh=r/max*PH;svg+=`<rect x="${x-45}" y="${T+PH-dh-rh}" width="90" height="${rh}" rx="3" fill="#334155"/><rect x="${x-45}" y="${T+PH-dh}" width="90" height="${dh}" rx="3" fill="#22c55e"/><text x="${x}" y="${H-22}" text-anchor="middle" font-size="9" fill="#e2e8f0">${summarySvgEscape(String(lab))}</text><text x="${x}" y="${Math.max(12,T+PH-dh-4)}" text-anchor="middle" font-size="9" fill="#e2e8f0">${d}/${total}</text>`;});
+                        svg+=`<rect x="${L}" y="${H-10}" width="7" height="7" fill="#22c55e"/><text x="${L+11}" y="${H-3}" font-size="8" fill="#94a3b8">Completed</text><rect x="${L+78}" y="${H-10}" width="7" height="7" fill="#334155"/><text x="${L+89}" y="${H-3}" font-size="8" fill="#94a3b8">Remaining</text></svg>`;
+                        calibHost.innerHTML=svg;
+                    } else calibHost.innerHTML=summaryDoughnut(Number(cDone)||0,Number(cRemaining)||0,0,0,false,p1,p2);
+                    calibHost.style.display='block';
+                }
+                if (projHost) {
+                    const plants = selectedPlant && selectedPlant !== 'ALL' ? ['Plant 1','Plant 2','PreMix'].filter(p=>normalizePlant(p)===normalizePlant(selectedPlant)) : ['Plant 1','Plant 2','PreMix'];
+                    const sts=[{key:'In Progress',color:'#3b82f6'},{key:'Planning',color:'#eab308'},{key:'On Hold',color:'#ef4444'},{key:'Completed',color:'#22c55e'}];
+                    const W=520,H=205,L=46,R=12,T=18,B=58,PH=H-T-B,labels=hasCompare?plants.flatMap(p=>[`${p==='PreMix'?'PreMix Plant':p} — ${p1}`,`${p==='PreMix'?'PreMix Plant':p} — ${p2}`]):plants.map(p=>p==='PreMix'?'PreMix Plant':p), max=Math.max(1,...labels.map((_,i)=>{const pi=Math.floor(i/(hasCompare?2:1)),cmp=hasCompare&&i%2===1,o=cmp?compareProjectByPlant:projectByPlant;return sts.reduce((z,st)=>z+Number(o?.[plants[pi]]?.[st.key]||0),0);})), G=(W-L-R)/Math.max(1,labels.length), BW=Math.max(10,Math.min(38,G*.62));
+                    let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" role="img" aria-label="Project status and progress">`;
+                    for(let i=0;i<=4;i++){const y=T+PH-(PH*i/4);svg+=`<line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}" stroke="#334155" opacity=".45"/><text x="${L-5}" y="${y+3}" text-anchor="end" font-size="8" fill="#94a3b8">${Math.round(max*i/4)}</text>`;}
+                    labels.forEach((lab,i)=>{const pi=Math.floor(i/(hasCompare?2:1)),cmp=hasCompare&&i%2===1,o=cmp?compareProjectByPlant:projectByPlant,x=L+i*G+(G-BW)/2;let y=T+PH;sts.forEach(st=>{const v=Number(o?.[plants[pi]]?.[st.key]||0),bh=v/max*PH;y-=bh;svg+=`<rect x="${x}" y="${y}" width="${BW}" height="${bh}" rx="2" fill="${st.color}"/>`;});const sh=String(lab).length>20?String(lab).slice(0,20)+'…':String(lab);svg+=`<text x="${x+BW/2}" y="${H-28}" text-anchor="middle" font-size="7" fill="#94a3b8">${summarySvgEscape(sh)}</text>`;});
+                    let lx=L,ly=H-7;sts.forEach(st=>{svg+=`<rect x="${lx}" y="${ly-7}" width="7" height="7" fill="${st.color}"/><text x="${lx+10}" y="${ly}" font-size="7" fill="#94a3b8">${summarySvgEscape(st.key)}</text>`;lx+=78;}); svg+='</svg>'; projHost.innerHTML=svg; projHost.style.display='block';
+                }
+                if (paretoHost) {
+                    renderSummaryParetoNative(primaryDowntimeLogs||[],hasCompare?(compareDowntimeLogs||[]):null,p1,p2,sortedLinePareto||[],paretoComparison?.compare||[]);
+                    paretoHost.style.display='block';
+                }
+            } catch(e) { console.error('Native Executive Summary chart recovery failed:',e); }
+        }
+
+        function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel, primaryDowntimeLogs, compareDowntimeLogs) {
+            // Native SVG/HTML is the authoritative renderer. This avoids blank canvases
+            // when Chart.js is blocked, cached incorrectly, or fails during initialization.
+            forceNativeExecutiveSummaryCharts(cDone,cRemaining,projectByPlant,selectedPlant,paretoComparison,compareDone,compareRemaining,compareProjectByPlant,comparePeriodLabel,primaryDowntimeLogs,compareDowntimeLogs,sortedLinePareto);
+            return;
         }
 
         // --- MODULE 1: CALIBRATION TRACKER ---
@@ -3917,7 +3949,8 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("int-active-num").innerText = intActive;
             document.getElementById("int-done-num").innerText = intDone;
 
-            // Render Doughnut Gauges
+            // Render Doughnut Gauges only when Chart.js is available. The KPI/data cards above remain usable without it.
+            if (typeof Chart === 'undefined') { ensureChartJsAvailable().then(ok => { if (ok) renderCalibGauges(); }); return; }
             const ctxExt = document.getElementById('gauge-ext-calib').getContext('2d');
             if (gaugeExt) gaugeExt.destroy();
             gaugeExt = new Chart(ctxExt, {
@@ -4304,7 +4337,6 @@ window.addEventListener("cloudsync:status", (event) => {
 
         // --- MODULE 2: PROCESS AUTOMATION UPTIME / DOWNTIME ---
         function onUptimeFilterTypeChange() {
-            populateDashboardYearFilters();
             const fType = document.getElementById("uptime-filter-type").value;
             const monthInput = document.getElementById("uptime-month-filter");
             const yearInput = document.getElementById("uptime-year-filter");
@@ -4319,7 +4351,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
             if (fType === "year") {
                 yearInput.classList.remove("hidden");
-                // Blank year means All Years.
+                if (!yearInput.value) yearInput.value = thisYear;
             } else if (fType === "month") {
                 monthInput.classList.remove("hidden");
                 if (!monthInput.value) monthInput.value = thisMonth;
@@ -4345,7 +4377,6 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function renderDowntimeModule() {
-            populateDashboardYearFilters();
             const fType = document.getElementById("uptime-filter-type").value;
             const monthVal = document.getElementById("uptime-month-filter").value;
             const yearVal = document.getElementById("uptime-year-filter").value;
@@ -4476,22 +4507,83 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            // Render the exact same Top 3 + Other Pareto representation used by Executive Summary.
+            // Render Downtime Pareto Chart — same total-by-Line logic as Executive Summary.
+            const lineMap = {};
+            primaryLogs.forEach(dt => {
+                const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+                const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
+                lineMap[line] = (lineMap[line] || 0) + dur;
+            });
+            const sortedPareto = Object.entries(lineMap).sort((a,b) => b[1] - a[1]);
+            let cumulative = 0;
+            const totalParetoHours = sortedPareto.reduce((sum, i) => sum + i[1], 0);
+            const cumulativePct = sortedPareto.map(i => {
+                cumulative += totalParetoHours ? (i[1] / totalParetoHours) * 100 : 0;
+                return Number(cumulative.toFixed(1));
+            });
+
+            const ctxDowntimePareto = document.getElementById('chart-downtime-pareto').getContext('2d');
+            if (chartDowntimePareto) chartDowntimePareto.destroy();
             const uptimeCompareLogs = (fType === "compare-year" || fType === "compare-month") ? downtimeLogs.filter(dt => {
                 if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
                 return fType === "compare-year"
                     ? checkDateMatchFilter(dt.start, 'year', compareYearVal, '')
                     : checkDateMatchFilter(dt.start, 'month', '', compareMonthVal);
             }) : [];
-            const uptimeIsCompare = fType === "compare-year" || fType === "compare-month";
-            const uptimePrimaryLabel = fType === 'compare-year' ? yearVal : fType === 'compare-month' ? monthVal : 'Selected Period';
-            const uptimeCompareLabel = uptimeIsCompare ? (fType === 'compare-year' ? compareYearVal : compareMonthVal) : '';
+            const uptimeBuildPareto = logs => {
+                const map = {};
+                logs.forEach(dt => {
+                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
+                    map[line] = (map[line] || 0) + dur;
+                });
+                return Object.entries(map).sort((a,b) => b[1] - a[1]);
+            };
+            const uptimePrimaryPareto = uptimeBuildPareto(primaryLogs);
+            const uptimeComparePareto = uptimeBuildPareto(uptimeCompareLogs);
+            const uptimeParetoPrimaryTotal = uptimePrimaryPareto.reduce((sum, [,hrs]) => sum + Number(hrs || 0), 0);
+            const uptimeParetoCompareTotal = uptimeComparePareto.reduce((sum, [,hrs]) => sum + Number(hrs || 0), 0);
             const dtParetoTitle = document.getElementById('dt-pareto-title');
-            if (dtParetoTitle) dtParetoTitle.textContent = uptimeIsCompare
-                ? `Downtime Pareto by Line Category — Specific Equipment — ${uptimePrimaryLabel} vs ${uptimeCompareLabel}`
-                : `Downtime Pareto by Line Category — Specific Equipment — ${uptimePrimaryLabel}`;
-            // Native rendering guarantees the same Pareto remains visible even if Chart.js is blocked.
-            try { renderNativeParetoChart('chart-downtime-pareto', primaryLogs, uptimeCompareLogs, uptimePrimaryLabel, uptimeCompareLabel, 'dt-pareto-note'); } catch (e) { console.warn('Uptime Pareto render failed:', e); }
+            if (dtParetoTitle) {
+                dtParetoTitle.textContent = (fType === 'compare-year' || fType === 'compare-month')
+                    ? `Downtime Pareto by Line Category — ${fType === 'compare-year' ? yearVal : monthVal}: ${uptimeParetoPrimaryTotal.toFixed(1)} hrs | ${fType === 'compare-year' ? compareYearVal : compareMonthVal}: ${uptimeParetoCompareTotal.toFixed(1)} hrs`
+                    : `Downtime Pareto by Line Category — ${fType === 'year' ? yearVal : fType === 'month' ? monthVal : 'All Time'} Total: ${uptimeParetoPrimaryTotal.toFixed(1)} hrs`;
+            }
+            const uptimeByLine = {};
+            uptimePrimaryPareto.forEach(([line, hrs]) => uptimeByLine[line] = {primary: hrs, compare: 0});
+            uptimeComparePareto.forEach(([line, hrs]) => {
+                if (!uptimeByLine[line]) uptimeByLine[line] = {primary: 0, compare: 0};
+                uptimeByLine[line].compare = hrs;
+            });
+            const uptimeParetoRows = Object.entries(uptimeByLine).sort((a,b) => (b[1].primary+b[1].compare)-(a[1].primary+a[1].compare));
+            let upCum=0;
+            const upTotal = uptimeParetoRows.reduce((sum,[,v])=>sum+v.primary+(fType.startsWith("compare-")?v.compare:0),0);
+            const upCumPct = uptimeParetoRows.map(([,v])=>{ upCum += upTotal ? ((v.primary+(fType.startsWith("compare-")?v.compare:0))/upTotal)*100 : 0; return Number(upCum.toFixed(1)); });
+            const upLabels = uptimeParetoRows.length ? uptimeParetoRows.map(([line]) => line.length > 18 ? line.slice(0,18)+'…' : line) : ['No Incidents'];
+            chartDowntimePareto = new Chart(ctxDowntimePareto, {
+                type: 'bar',
+                data: {
+                    labels: upLabels,
+                    datasets: (fType === "compare-year" || fType === "compare-month") ? [
+                        { label: yearVal && fType === "compare-year" ? yearVal : monthVal, data: uptimeParetoRows.map(([,v])=>Number(v.primary.toFixed(1))), backgroundColor:'#ef4444', borderRadius:6, order:2 },
+                        { label: compareYearVal && fType === "compare-year" ? compareYearVal : compareMonthVal, data: uptimeParetoRows.map(([,v])=>Number(v.compare.toFixed(1))), backgroundColor:'#3b82f6', borderRadius:6, order:2 },
+                        { type:'line', label:'Cumulative % (combined)', data:upCumPct.length?upCumPct:[0], borderColor:'#38bdf8', backgroundColor:'#38bdf8', borderWidth:2, pointRadius:3, tension:0.25, yAxisID:'y1', order:1 }
+                    ] : [
+                        { label:'Downtime (hrs)', data:uptimeParetoRows.length?uptimeParetoRows.map(([,v])=>Number(v.primary.toFixed(1))):[0], backgroundColor:'#ef4444', borderRadius:6, order:2 },
+                        { type:'line', label:'Cumulative %', data:upCumPct.length?upCumPct:[0], borderColor:'#38bdf8', backgroundColor:'#38bdf8', borderWidth:2, pointRadius:3, tension:0.25, yAxisID:'y1', order:1 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
+                        tooltip: { callbacks: { label: ctx => ctx.dataset.label === 'Cumulative %' ? `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%` : `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)} hrs` } } },
+                    scales: {
+                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.4)' } },
+                        y1: { beginAtZero: true, min: 0, max: 100, position: 'right', ticks: { font: { size: 9 }, color: '#38bdf8', callback: value => `${value}%` }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
 
             // When the Uptime/Downtime filter is changed directly, refresh Executive Summary
             // so both pages always show the same selected period.
@@ -4503,13 +4595,12 @@ window.addEventListener("cloudsync:status", (event) => {
         function openDowntimeForm() {
             if (!isAdminUser()) return;
             cancelDowntimeEdit(true);
-            const panel = document.getElementById('downtime-entry-panel');
-            if (panel) { panel.classList.remove('hidden'); panel.style.display = 'flex'; }
+            document.getElementById('downtime-entry-panel')?.classList.remove('hidden');
+            document.getElementById('downtime-entry-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         function closeDowntimeForm() {
-            const panel = document.getElementById('downtime-entry-panel');
-            if (panel) { panel.style.display = 'none'; panel.classList.add('hidden'); }
+            document.getElementById('downtime-entry-panel')?.classList.add('hidden');
         }
 
         function handleDowntimeSubmit(e) {
@@ -4557,11 +4648,10 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function editDowntime(id) {
             if (!isAdminUser()) return;
+            openDowntimeForm();
             const dt = downtimeLogs.find(item => item.id === id);
             if (!dt) return;
 
-            const downtimePanel = document.getElementById("downtime-entry-panel");
-            if (downtimePanel) { downtimePanel.classList.remove('hidden'); downtimePanel.style.display = 'flex'; }
             document.getElementById("dt-id").value = dt.id;
             document.getElementById("dt-plant").value = dt.plant;
             document.getElementById("dt-code").value = dt.code;
@@ -4578,13 +4668,13 @@ window.addEventListener("cloudsync:status", (event) => {
             window.scrollTo({ top: 400, behavior: 'smooth' });
         }
 
-        function cancelDowntimeEdit(keepOpen = false) {
+        function cancelDowntimeEdit() {
             document.getElementById("dt-id").value = "";
             document.getElementById("downtime-form").reset();
             document.getElementById("downtime-form-title").innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Log Downtime Event`;
             document.getElementById("dt-submit-btn").innerText = "Log Event & Update Metrics";
             document.getElementById("dt-cancel-edit-btn").classList.add("hidden");
-            if (!keepOpen) closeDowntimeForm();
+            closeDowntimeForm();
         }
 
         function deleteDowntime(id) {
