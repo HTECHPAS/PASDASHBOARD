@@ -3016,6 +3016,14 @@ window.addEventListener("cloudsync:status", (event) => {
                     calibD.getMonth() > schedD.getMonth());
         }
 
+        function normalizePlant(value) {
+            const v = String(value || "").trim().toLowerCase();
+            if (v === "premix" || v === "premix plant" || v === "pre-mix") return "PreMix";
+            if (v === "plant 1") return "Plant 1";
+            if (v === "plant 2") return "Plant 2";
+            return String(value || "").trim();
+        }
+
         function getCalibStatus(eq) {
             const now = new Date();
             now.setHours(0,0,0,0);
@@ -3079,36 +3087,43 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Filter equipment list based on plant and date filter (checking sched or calib date)
             const filteredEq = equipmentList.filter(eq => {
-                if (currentPlant !== "ALL" && eq.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
                 const matchesDate = checkDateMatchFilter(eq.extCalib || eq.extSched || eq.intCalib || eq.intSched, fType, yearVal, monthVal);
                 return matchesDate;
             });
 
             // Filter downtime logs
             const filteredDt = downtimeLogs.filter(dt => {
-                if (currentPlant !== "ALL" && dt.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
                 return checkDateMatchFilter(dt.start, fType, yearVal, monthVal);
             });
 
             // Filter projects
             const filteredPr = projectsList.filter(pr => {
-                if (currentPlant !== "ALL" && pr.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
                 return checkDateMatchFilter(pr.date, fType, yearVal, monthVal);
             });
 
-            // Calculate Calib KPIs
+            // Calculate calibration KPIs by instrument schedule.
+            // External and Internal are separate instruments; N/A/no schedule is not counted.
             let cDone = 0, cOverdue = 0, cOverdueDone = 0, cPending = 0, cStsok = 0, cNa = 0;
             filteredEq.forEach(eq => {
-                const st = getCalibStatus(eq);
-                if (st === "DONE") cDone++;
-                else if (st === "OVERDUE, DONE") cOverdueDone++;
-                else if (st === "OVERDUE") cOverdue++;
-                else if (st === "PENDING") cPending++;
-                else if (st === "STSOK") cStsok++;
-                else cNa++;
+                const sub = [
+                    getSubCalibStatus(eq.extSched, eq.extCalib),
+                    getSubCalibStatus(eq.intSched, eq.intCalib)
+                ];
+                const active = sub.filter(x => x !== "NA");
+                if (!active.length) { cNa++; return; }
+                active.forEach(st => {
+                    if (st === "DONE") cDone++;
+                    else if (st === "OVERDUE, DONE") { cOverdueDone++; cDone++; }
+                    else if (st === "OVERDUE") cOverdue++;
+                    else if (st === "PENDING") cPending++;
+                    else if (st === "STSOK") cStsok++;
+                });
             });
 
-            const totalScheduledCalib = filteredEq.length - cNa;
+            const totalScheduledCalib = cDone + cOverdue + cPending + cStsok;
             const calibCompliance = totalScheduledCalib > 0 ? Math.round((cDone / totalScheduledCalib) * 100) : 0;
 
             document.getElementById("summary-calib-compliance").innerText = `${calibCompliance}%`;
@@ -3185,46 +3200,88 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            // Supporting details breakdown lists
-            const calibSupp = document.getElementById("summary-per-plant-calib");
-            const scheduledTotal = Math.max(0, filteredEq.length - cNa);
-            const donePct = scheduledTotal ? ((cDone / scheduledTotal) * 100).toFixed(1) : '0.0';
-            calibSupp.innerHTML = `
-                <div class="space-y-1">
-                    <div class="flex items-center justify-between text-xs py-1.5 border-b border-slate-700/40">
-                        <span>DONE</span><strong class="text-emerald-400">${cDone} / ${scheduledTotal} (${donePct}%)</strong>
-                    </div>
-                    <div class="flex items-center justify-between text-xs py-1.5">
-                        <span>Scheduled Instruments</span><strong class="text-slate-300">${scheduledTotal}</strong>
-                    </div>
-                </div>`;
+            // Supporting details: one row per plant, always visible. The main plant filter
+            // controls which rows are shown; calibration totals external + internal schedules.
+            const allSummaryPlants = ["Plant 1", "Plant 2", "PreMix"];
+            const summaryPlants = currentPlant === "ALL"
+                ? allSummaryPlants
+                : allSummaryPlants.filter(p => normalizePlant(p) === normalizePlant(currentPlant));
 
-            let pInProgress = 0, pPlanning = 0, pOnHold = 0, pCompleted = 0;
-            filteredPr.forEach(pr => {
-                const status = String(pr.status || "").trim();
-                if (status === "In Progress") pInProgress++;
-                else if (status === "Planning") pPlanning++;
-                else if (status === "On Hold") pOnHold++;
-                else if (status === "Completed") pCompleted++;
+            const calibByPlant = {};
+            const projectByPlant = {};
+            allSummaryPlants.forEach(p => {
+                calibByPlant[p] = { done: 0, scheduled: 0 };
+                projectByPlant[p] = { "In Progress": 0, Planning: 0, "On Hold": 0, Completed: 0 };
             });
+
+            filteredEq.forEach(eq => {
+                const plant = normalizePlant(eq.plant);
+                if (!calibByPlant[plant]) return;
+                [
+                    getSubCalibStatus(eq.extSched, eq.extCalib),
+                    getSubCalibStatus(eq.intSched, eq.intCalib)
+                ].forEach(st => {
+                    if (st === "NA") return;
+                    calibByPlant[plant].scheduled++;
+                    if (st === "DONE" || st === "OVERDUE, DONE") calibByPlant[plant].done++;
+                });
+            });
+
+            filteredPr.forEach(pr => {
+                const plant = normalizePlant(pr.plant);
+                if (!projectByPlant[plant]) return;
+                const status = String(pr.status || "Planning").trim();
+                if (Object.prototype.hasOwnProperty.call(projectByPlant[plant], status)) projectByPlant[plant][status]++;
+            });
+
+            const calibSupp = document.getElementById("summary-per-plant-calib");
+            calibSupp.innerHTML = `
+                <div class="grid grid-cols-4 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
+                    <span>Plant</span><span class="text-center">Done</span><span class="text-center">Scheduled Instruments</span><span class="text-center">Percent</span>
+                </div>
+                ${summaryPlants.map(p => {
+                    const d = calibByPlant[p]?.done || 0;
+                    const sch = calibByPlant[p]?.scheduled || 0;
+                    const pct = sch ? ((d / sch) * 100).toFixed(0) : "0";
+                    return `<div class="grid grid-cols-4 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0">
+                        <span class="font-semibold text-white">${escapeHtml(p)}</span>
+                        <strong class="text-center text-emerald-400">${d}</strong>
+                        <span class="text-center text-slate-300">${sch}</span>
+                        <span class="text-center text-blue-300">${pct}%</span>
+                    </div>`;
+                }).join("") || `<div class="text-xs text-slate-500 italic">No plant selected.</div>`}`;
+
+            const pInProgress = filteredPr.filter(pr => String(pr.status || "").trim() === "In Progress").length;
+            const pPlanning = filteredPr.filter(pr => String(pr.status || "").trim() === "Planning").length;
+            const pOnHold = filteredPr.filter(pr => String(pr.status || "").trim() === "On Hold").length;
+            const pCompleted = filteredPr.filter(pr => String(pr.status || "").trim() === "Completed").length;
 
             const projSupp = document.getElementById("summary-per-plant-projects");
             const projectViewAction = isPageAllowed("projects")
                 ? `<button type="button" onclick="openProjectsFromSummary()" class="mt-2 w-full px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/15 text-[10px] font-semibold transition"><i class="fa-solid fa-folder-open mr-1"></i> View Projects</button>`
                 : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
             projSupp.innerHTML = `
-                <div class="flex justify-between text-xs py-1 border-b border-slate-700/40"><span>In Progress:</span><strong class="text-blue-400">${pInProgress}</strong></div>
-                <div class="flex justify-between text-xs py-1 border-b border-slate-700/40"><span>Planning:</span><strong class="text-amber-400">${pPlanning}</strong></div>
-                <div class="flex justify-between text-xs py-1 border-b border-slate-700/40"><span>On Hold:</span><strong class="text-red-400">${pOnHold}</strong></div>
-                <div class="flex justify-between text-xs py-1"><span>Completed:</span><strong class="text-emerald-400">${pCompleted}</strong></div>
-                ${projectViewAction}
-            `;
+                <div class="grid grid-cols-5 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
+                    <span>Plant</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span>
+                </div>
+                ${summaryPlants.map(p => {
+                    const d = projectByPlant[p] || {};
+                    return `<div class="grid grid-cols-5 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0">
+                        <span class="font-semibold text-white">${escapeHtml(p)}</span>
+                        <strong class="text-center text-blue-400">${d["In Progress"] || 0}</strong>
+                        <strong class="text-center text-amber-400">${d.Planning || 0}</strong>
+                        <strong class="text-center text-red-400">${d["On Hold"] || 0}</strong>
+                        <strong class="text-center text-emerald-400">${d.Completed || 0}</strong>
+                    </div>`;
+                }).join("")}
+                ${projectViewAction}`;
 
-            // Render summary charts
-            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto);
+            // Render summary charts. Project chart receives per-plant counts so the main plant filter
+            // can show only the selected plant.
+            renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, sortedLinePareto, currentPlant);
         }
 
-        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto) {
+        function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant) {
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
@@ -3261,28 +3318,35 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             });
 
-            // 2) Project status
+            // 2) Project Status & Progress — same stacked-bar indication as Automation Projects.
             const ctxProj = projCanvas.getContext('2d');
             if (chartSummaryProjects) chartSummaryProjects.destroy();
+            const allSummaryPlants = ['Plant 1', 'Plant 2', 'PreMix'];
+            const chartPlants = selectedPlant && selectedPlant !== 'ALL'
+                ? allSummaryPlants.filter(p => normalizePlant(p) === normalizePlant(selectedPlant))
+                : allSummaryPlants;
+            const chartLabels = chartPlants.map(p => p === 'PreMix' ? 'PreMix Plant' : p);
+            const getSeries = key => chartPlants.map(p => Number(projectByPlant?.[p]?.[key] || 0));
             chartSummaryProjects = new Chart(ctxProj, {
                 type: 'bar',
                 data: {
-                    labels: ['In Progress', 'Planning', 'On Hold', 'Completed'],
-                    datasets: [{
-                        label: 'Projects',
-                        data: [pInProgress, pPlanning, pOnHold, pCompleted],
-                        backgroundColor: ['#3b82f6', '#eab308', '#ef4444', '#22c55e'],
-                        borderRadius: 5,
-                        maxBarThickness: 34
-                    }]
+                    labels: chartLabels,
+                    datasets: [
+                        { label: 'In Progress', data: getSeries('In Progress'), backgroundColor: '#3b82f6', borderRadius: 4 },
+                        { label: 'Planning', data: getSeries('Planning'), backgroundColor: '#eab308', borderRadius: 4 },
+                        { label: 'On Hold', data: getSeries('On Hold'), backgroundColor: '#ef4444', borderRadius: 4 },
+                        { label: 'Completed', data: getSeries('Completed'), backgroundColor: '#22c55e', borderRadius: 4 }
+                    ]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+                    plugins: {
+                        legend: { display: true, position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
                     scales: {
-                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51, 65, 85, 0.35)' } }
+                        x: { stacked: true, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
+                        y: { stacked: true, beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.4)' } }
                     }
                 }
             });
@@ -3402,9 +3466,11 @@ window.addEventListener("cloudsync:status", (event) => {
             const statusFilter = document.getElementById("calib-filter-status").value;
 
             const filtered = equipmentList.filter(eq => {
-                if (currentPlant !== "ALL" && eq.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
                 const status = getCalibStatus(eq);
-                if (statusFilter !== "ALL" && status !== statusFilter) return false;
+                const extStatus = getSubCalibStatus(eq.extSched, eq.extCalib);
+                const intStatus = getSubCalibStatus(eq.intSched, eq.intCalib);
+                if (statusFilter !== "ALL" && status !== statusFilter && extStatus !== statusFilter && intStatus !== statusFilter) return false;
 
                 if (search) {
                     const matchText = `${eq.code} ${eq.type} ${eq.extBy} ${eq.intBy} ${eq.pr} ${eq.po} ${eq.plant}`.toLowerCase();
@@ -3800,7 +3866,7 @@ window.addEventListener("cloudsync:status", (event) => {
             }
 
             const primaryLogs = downtimeLogs.filter(dt => {
-                if (currentPlant !== "ALL" && dt.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
                 if (search) {
                     const txt = `${dt.code} ${dt.equipment} ${dt.line} ${dt.category} ${dt.notes}`.toLowerCase();
                     if (!txt.includes(search)) return false;
@@ -3839,7 +3905,7 @@ window.addEventListener("cloudsync:status", (event) => {
             if (fType === "compare") {
                 compCard.classList.remove("hidden");
                 const compLogs = downtimeLogs.filter(dt => {
-                    if (currentPlant !== "ALL" && dt.plant !== currentPlant) return false;
+                    if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
                     return dt.start.startsWith(compareMonthVal);
                 });
                 let compHrs = 0;
@@ -4050,7 +4116,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
                 // Find equipment scheduled or calibrated on this date
                 const matchedEq = equipmentList.filter(eq => {
-                    if (currentPlant !== "ALL" && eq.plant !== currentPlant) return false;
+                    if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
                     return eq.extSched === dateStr || eq.extCalib === dateStr || eq.intSched === dateStr || eq.intCalib === dateStr;
                 });
 
@@ -4215,7 +4281,7 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("projects-chart-year-badge").innerText = `Year: ${yearFilter}`;
 
             const filtered = projectsList.filter(pr => {
-                if (currentPlant !== "ALL" && pr.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
                 if (yearFilter !== "ALL" && !String(pr.date || "").startsWith(yearFilter)) return false;
                 return true;
             });
@@ -4284,7 +4350,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 "Completed": plants.map(() => 0)
             };
             filtered.forEach(pr => {
-                const pi = plants.indexOf(pr.plant);
+                const pi = plants.indexOf(normalizePlant(pr.plant));
                 if (pi < 0) return;
                 const status = String(pr.status || "Planning").trim();
                 if (!statusCounts[status]) statusCounts[status] = plants.map(() => 0);
