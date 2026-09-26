@@ -616,35 +616,14 @@ window.CloudSync = (() => {
     async function refreshIfClean() {
         if (!configured() || syncing || !ready) return;
         // Only pull automatically when this browser has no unsaved local edits.
-        // Do NOT redraw the whole dashboard when nothing changed remotely.
-        // Recreating Chart.js instances every 5 seconds causes visible chart
-        // animation/repetition and also collapses inline project timelines.
+        // That lets another browser's saved changes appear without destroying
+        // edits currently being made here.
         try {
             for (const dataset of Object.keys(DATASETS)) {
                 const local = readArray(DATASETS[dataset].key);
                 if (!sameJson(local, lastSynced[dataset])) return;
             }
-            const before = {};
-            for (const dataset of Object.keys(DATASETS)) {
-                before[dataset] = JSON.stringify(readArray(DATASETS[dataset].key));
-            }
-            for (const [type, key] of Object.entries(CATEGORIES)) {
-                before[`cat:${type}`] = JSON.stringify(readArray(key));
-            }
-
             await pull();
-
-            let changed = false;
-            for (const dataset of Object.keys(DATASETS)) {
-                if (before[dataset] !== JSON.stringify(readArray(DATASETS[dataset].key))) { changed = true; break; }
-            }
-            if (!changed) {
-                for (const [type, key] of Object.entries(CATEGORIES)) {
-                    if (before[`cat:${type}`] !== JSON.stringify(readArray(key))) { changed = true; break; }
-                }
-            }
-            if (!changed) return;
-
             if (typeof renderAll === "function") renderAll();
             else if (typeof renderSummaryModule === "function") {
                 renderSummaryModule();
@@ -2510,8 +2489,6 @@ window.addEventListener("cloudsync:status", (event) => {
         let chartSummaryProjects = null;
         let chartProjectsMill = null;
         let chartDowntimePareto = null;
-        // Keep inline project timelines open when background cloud refreshes redraw the project cards.
-        const expandedProjectTimelines = new Set();
 
         window.onload = function() {
             // Require login again after every browser refresh.
@@ -3185,46 +3162,87 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            // Supporting details breakdown lists
+            // Supporting details breakdown by plant
             const calibSupp = document.getElementById("summary-per-plant-calib");
-            const scheduledTotal = Math.max(0, filteredEq.length - cNa);
-            const donePct = scheduledTotal ? ((cDone / scheduledTotal) * 100).toFixed(1) : '0.0';
-            calibSupp.innerHTML = `
-                <div class="space-y-1">
-                    <div class="flex items-center justify-between text-xs py-1.5 border-b border-slate-700/40">
-                        <span>DONE</span><strong class="text-emerald-400">${cDone} / ${scheduledTotal} (${donePct}%)</strong>
-                    </div>
-                    <div class="flex items-center justify-between text-xs py-1.5">
-                        <span>Scheduled Instruments</span><strong class="text-slate-300">${scheduledTotal}</strong>
-                    </div>
-                </div>`;
+            const projSupp = document.getElementById("summary-per-plant-projects");
 
-            let pInProgress = 0, pPlanning = 0, pOnHold = 0, pCompleted = 0;
-            filteredPr.forEach(pr => {
-                const status = String(pr.status || "").trim();
-                if (status === "In Progress") pInProgress++;
-                else if (status === "Planning") pPlanning++;
-                else if (status === "On Hold") pOnHold++;
-                else if (status === "Completed") pCompleted++;
+            // Use the same filtered records/KPI rules as the Executive Summary, but split them by Plant.
+            const plantNames = Array.from(new Set([
+                ...filteredEq.map(eq => String(eq.plant || "Unassigned Plant").trim()),
+                ...filteredPr.map(pr => String(pr.plant || "Unassigned Plant").trim())
+            ].filter(Boolean))).sort((a, b) => a.localeCompare(b));
+
+            const calibByPlant = {};
+            filteredEq.forEach(eq => {
+                const plant = String(eq.plant || "Unassigned Plant").trim();
+                if (!calibByPlant[plant]) calibByPlant[plant] = { done: 0, scheduled: 0 };
+                const st = getCalibStatus(eq);
+                if (st !== "NO CALIB SCHED") calibByPlant[plant].scheduled++;
+                if (st === "DONE") calibByPlant[plant].done++;
             });
 
-            const projSupp = document.getElementById("summary-per-plant-projects");
+            const projectByPlant = {};
+            filteredPr.forEach(pr => {
+                const plant = String(pr.plant || "Unassigned Plant").trim();
+                if (!projectByPlant[plant]) {
+                    projectByPlant[plant] = { inProgress: 0, planning: 0, onHold: 0, completed: 0 };
+                }
+                if (pr.status === "In Progress") projectByPlant[plant].inProgress++;
+                else if (pr.status === "Planning") projectByPlant[plant].planning++;
+                else if (pr.status === "On Hold") projectByPlant[plant].onHold++;
+                else if (pr.status === "Completed") projectByPlant[plant].completed++;
+            });
+
+            const plantColumns = plantNames.length || 1;
+            const plantGridClass = plantNames.length >= 4
+                ? "grid-cols-2 xl:grid-cols-4"
+                : plantNames.length === 3
+                    ? "grid-cols-1 sm:grid-cols-3"
+                    : plantNames.length === 2
+                        ? "grid-cols-1 sm:grid-cols-2"
+                        : "grid-cols-1";
+
+            calibSupp.innerHTML = plantNames.length
+                ? `<div class="grid ${plantGridClass} gap-2 items-stretch">${plantNames.map(plant => {
+                    const v = calibByPlant[plant] || { done: 0, scheduled: 0 };
+                    const pct = v.scheduled ? ((v.done / v.scheduled) * 100).toFixed(1) : "0.0";
+                    return `
+                        <div class="bg-slate-900/50 border border-slate-700/50 rounded-lg p-2.5 min-w-0">
+                            <div class="text-[11px] font-bold text-white truncate mb-1.5" title="${escapeHtml(plant)}">${escapeHtml(plant)}</div>
+                            <div class="flex items-center justify-between text-xs py-1 border-b border-slate-700/40">
+                                <span>Done</span><strong class="text-emerald-400">${v.done}</strong>
+                            </div>
+                            <div class="flex items-center justify-between text-xs py-1">
+                                <span>Scheduled Instruments</span><strong class="text-slate-300">${v.scheduled}</strong>
+                            </div>
+                            <div class="text-[9px] text-slate-500 text-right mt-1">${pct}% complete</div>
+                        </div>`;
+                }).join("")}</div>`
+                : `<div class="text-xs text-slate-500 italic py-2">No calibration records found for the selected filter.</div>`;
+
             const projectViewAction = isPageAllowed("projects")
                 ? `<button type="button" onclick="openProjectsFromSummary()" class="mt-2 w-full px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/15 text-[10px] font-semibold transition"><i class="fa-solid fa-folder-open mr-1"></i> View Projects</button>`
                 : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
-            projSupp.innerHTML = `
-                <div class="flex justify-between text-xs py-1 border-b border-slate-700/40"><span>In Progress:</span><strong class="text-blue-400">${pInProgress}</strong></div>
-                <div class="flex justify-between text-xs py-1 border-b border-slate-700/40"><span>Planning:</span><strong class="text-amber-400">${pPlanning}</strong></div>
-                <div class="flex justify-between text-xs py-1 border-b border-slate-700/40"><span>On Hold:</span><strong class="text-red-400">${pOnHold}</strong></div>
-                <div class="flex justify-between text-xs py-1"><span>Completed:</span><strong class="text-emerald-400">${pCompleted}</strong></div>
-                ${projectViewAction}
-            `;
+
+            projSupp.innerHTML = plantNames.length
+                ? `<div class="grid ${plantGridClass} gap-2 items-stretch">${plantNames.map(plant => {
+                    const v = projectByPlant[plant] || { inProgress: 0, planning: 0, onHold: 0, completed: 0 };
+                    return `
+                        <div class="bg-slate-900/50 border border-slate-700/50 rounded-lg p-2.5 min-w-0">
+                            <div class="text-[11px] font-bold text-white truncate mb-1.5" title="${escapeHtml(plant)}">${escapeHtml(plant)}</div>
+                            <div class="flex items-center justify-between text-xs py-1 border-b border-slate-700/40"><span>In Progress</span><strong class="text-blue-400">${v.inProgress}</strong></div>
+                            <div class="flex items-center justify-between text-xs py-1 border-b border-slate-700/40"><span>Planning</span><strong class="text-amber-400">${v.planning}</strong></div>
+                            <div class="flex items-center justify-between text-xs py-1 border-b border-slate-700/40"><span>On Hold</span><strong class="text-orange-400">${v.onHold}</strong></div>
+                            <div class="flex items-center justify-between text-xs py-1"><span>Completed</span><strong class="text-emerald-400">${v.completed}</strong></div>
+                        </div>`;
+                }).join("")}</div>${projectViewAction}`
+                : `<div class="text-xs text-slate-500 italic py-2">No project records found for the selected filter.</div>${projectViewAction}`;
 
             // Render summary charts
-            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto);
+            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pCompleted, sortedLinePareto);
         }
 
-        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto) {
+        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pCompleted, sortedLinePareto) {
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
@@ -3267,11 +3285,11 @@ window.addEventListener("cloudsync:status", (event) => {
             chartSummaryProjects = new Chart(ctxProj, {
                 type: 'bar',
                 data: {
-                    labels: ['In Progress', 'Planning', 'On Hold', 'Completed'],
+                    labels: ['In Progress', 'Planning', 'Completed'],
                     datasets: [{
                         label: 'Projects',
-                        data: [pInProgress, pPlanning, pOnHold, pCompleted],
-                        backgroundColor: ['#3b82f6', '#eab308', '#ef4444', '#22c55e'],
+                        data: [pInProgress, pPlanning, pCompleted],
+                        backgroundColor: ['#3b82f6', '#eab308', '#22c55e'],
                         borderRadius: 5,
                         maxBarThickness: 34
                     }]
@@ -4166,18 +4184,14 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function toggleProjectTimeline(id) {
-            const key = String(id);
             const el = document.getElementById(`project-timeline-${id}`);
             const btn = document.getElementById(`project-view-btn-${id}`);
             if (!el) return;
-            const willOpen = el.classList.contains('hidden');
-            el.classList.toggle('hidden', !willOpen);
-            if (willOpen) expandedProjectTimelines.add(key);
-            else expandedProjectTimelines.delete(key);
+            const hidden = el.classList.toggle('hidden');
             if (btn) {
-                btn.innerHTML = willOpen
-                    ? '<i class="fa-solid fa-eye-slash mr-1"></i> Hide Timeline'
-                    : '<i class="fa-solid fa-eye mr-1"></i> View Timeline';
+                btn.innerHTML = hidden
+                    ? '<i class="fa-solid fa-eye mr-1"></i> View Timeline'
+                    : '<i class="fa-solid fa-eye-slash mr-1"></i> Hide Timeline';
             }
         }
 
@@ -4216,7 +4230,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const filtered = projectsList.filter(pr => {
                 if (currentPlant !== "ALL" && pr.plant !== currentPlant) return false;
-                if (yearFilter !== "ALL" && !String(pr.date || "").startsWith(yearFilter)) return false;
+                if (yearFilter !== "ALL" && !pr.date.startsWith(yearFilter)) return false;
                 return true;
             });
 
@@ -4234,20 +4248,20 @@ window.addEventListener("cloudsync:status", (event) => {
                         "Completed": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                     };
                     const tm = getTimelineMetrics(pr);
-                    const computed = tm.timelineProgress == null ? Number(pr.progress || 0) : tm.timelineProgress;
+                    const computed = tm.timelineProgress == null ? pr.progress : tm.timelineProgress;
                     const card = document.createElement("div");
                     card.className = "bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between space-y-4 shadow-lg";
                     card.innerHTML = `
                         <div class="space-y-2">
                             <div class="flex items-start justify-between gap-2">
                                 <h4 class="text-xs font-bold text-white uppercase tracking-wider">${escapeHtml(pr.title)}</h4>
-                                <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${statusColors[pr.status] || ''} whitespace-nowrap">${escapeHtml(pr.status || 'Planning')}</span>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${statusColors[pr.status] || ''} whitespace-nowrap">${escapeHtml(pr.status)}</span>
                             </div>
                             <div class="flex items-center gap-3 text-[11px] text-slate-400"><span><i class="fa-solid fa-building text-blue-400 mr-1"></i>${escapeHtml(pr.plant)}</span><span><i class="fa-solid fa-user-gear text-purple-400 mr-1"></i>${escapeHtml(pr.lead)}</span></div>
                         </div>
                         <div class="space-y-1.5">
-                            <div class="flex justify-between text-xs font-semibold"><span class="text-slate-400">Project Progress</span><span class="text-white">${computed}%</span></div>
-                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-700"><div class="bg-cyan-500 h-full rounded-full transition-all duration-500" style="width:${Math.max(0, Math.min(100, computed))}%"></div></div>
+                            <div class="flex justify-between text-xs font-semibold"><span class="text-slate-400">Timeline Computed Progress</span><span class="text-white">${computed}%</span></div>
+                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-700"><div class="bg-cyan-500 h-full rounded-full transition-all duration-500" style="width:${computed}%"></div></div>
                         </div>
                         <p class="text-xs text-slate-300 bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">${escapeHtml(pr.notes || 'No milestones logged.')}</p>
                         <button id="project-view-btn-${pr.id}" type="button" onclick="toggleProjectTimeline(${pr.id})" class="w-full text-left px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/15 text-[11px] font-semibold transition">
@@ -4262,65 +4276,16 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            // Restore timeline expansion after any intentional project redraw.
-            filtered.forEach(pr => {
-                if (!expandedProjectTimelines.has(String(pr.id))) return;
-                const el = document.getElementById(`project-timeline-${pr.id}`);
-                const btn = document.getElementById(`project-view-btn-${pr.id}`);
-                if (el) el.classList.remove('hidden');
-                if (btn) btn.innerHTML = '<i class="fa-solid fa-eye-slash mr-1"></i> Hide Timeline';
-            });
-
             container.querySelectorAll(".admin-only").forEach(el => el.classList.toggle("hidden", !isAdminUser()));
 
-            // Project Distribution & Progress per Mill: one stacked bar per plant,
-            // split by the actual project status. This stays synchronized with the
-            // same filtered project records used by the cards above.
-            const plants = ["Plant 1", "Plant 2", "PreMix"];
-            const statusCounts = {
-                "In Progress": plants.map(() => 0),
-                "Planning": plants.map(() => 0),
-                "On Hold": plants.map(() => 0),
-                "Completed": plants.map(() => 0)
-            };
-            filtered.forEach(pr => {
-                const pi = plants.indexOf(pr.plant);
-                if (pi < 0) return;
-                const status = String(pr.status || "Planning").trim();
-                if (!statusCounts[status]) statusCounts[status] = plants.map(() => 0);
-                statusCounts[status][pi] += 1;
+            const millMap = { "Plant 1": 0, "Plant 2": 0, "PreMix": 0 };
+            filtered.forEach(pr => { if (millMap[pr.plant] !== undefined) millMap[pr.plant] += 1; });
+            const ctxMill = document.getElementById('chart-projects-mill').getContext('2d');
+            if (chartProjectsMill) chartProjectsMill.destroy();
+            chartProjectsMill = new Chart(ctxMill, {
+                type: 'bar', data: { labels: ['Plant 1', 'Plant 2', 'PreMix Plant'], datasets: [{ label: 'Active Projects', data: [millMap["Plant 1"], millMap["Plant 2"], millMap["PreMix"]], backgroundColor: ['#0284c7', '#0369a1', '#075985'], borderRadius: 8 }] },
+                options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{font:{size:10},color:'#94a3b8'},grid:{display:false}},y:{ticks:{font:{size:10},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,0.4)'}}} }
             });
-
-            const millCanvas = document.getElementById('chart-projects-mill');
-            if (millCanvas && typeof Chart !== 'undefined') {
-                const ctxMill = millCanvas.getContext('2d');
-                if (chartProjectsMill) chartProjectsMill.destroy();
-                chartProjectsMill = new Chart(ctxMill, {
-                    type: 'bar',
-                    data: {
-                        labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
-                        datasets: [
-                            { label: 'In Progress', data: statusCounts['In Progress'], backgroundColor: '#3b82f6', borderRadius: 4 },
-                            { label: 'Planning', data: statusCounts['Planning'], backgroundColor: '#eab308', borderRadius: 4 },
-                            { label: 'On Hold', data: statusCounts['On Hold'], backgroundColor: '#ef4444', borderRadius: 4 },
-                            { label: 'Completed', data: statusCounts['Completed'], backgroundColor: '#22c55e', borderRadius: 4 }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        animation: { duration: 250 },
-                        plugins: {
-                            legend: { display: true, position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
-                            tooltip: { mode: 'index', intersect: false }
-                        },
-                        scales: {
-                            x: { stacked: true, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
-                            y: { stacked: true, beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.4)' } }
-                        }
-                    }
-                });
-            }
         }
 
         function openProjectModal() {
