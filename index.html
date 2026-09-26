@@ -791,8 +791,9 @@ window.addEventListener("cloudsync:status", (event) => {
         .chart-box-container {
             position: relative;
             width: 100%;
-            height: 145px !important;
-            max-height: 145px !important;
+            height: 175px !important;
+            min-height: 175px !important;
+            max-height: 175px !important;
             overflow: hidden;
             display: flex;
             align-items: center;
@@ -801,7 +802,8 @@ window.addEventListener("cloudsync:status", (event) => {
 
         .chart-box-container canvas {
             max-width: 100% !important;
-            max-height: 145px !important;
+            height: 175px !important;
+            max-height: 175px !important;
         }
 
         @media print {
@@ -3482,7 +3484,40 @@ window.addEventListener("cloudsync:status", (event) => {
             renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, sortedLinePareto, currentPlant, paretoComparison, isCompare ? compareDone : null, isCompare ? Math.max(0, compareScheduled - compareDone) : null, compareProjectByPlant, isCompare ? compareValue : null);
         }
 
+        // Chart.js loader: keep Executive Summary charts working even if the primary CDN
+        // is slow or temporarily unavailable (common on some browsers/networks).
+        let chartJsLoadPromise = null;
+        function ensureChartJsLoaded() {
+            if (typeof Chart !== 'undefined') return Promise.resolve(true);
+            if (chartJsLoadPromise) return chartJsLoadPromise;
+            chartJsLoadPromise = new Promise((resolve) => {
+                const sources = [
+                    'https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js',
+                    'https://unpkg.com/chart.js@4.5.0/dist/chart.umd.min.js'
+                ];
+                let i = 0;
+                const tryNext = () => {
+                    if (typeof Chart !== 'undefined') return resolve(true);
+                    if (i >= sources.length) return resolve(false);
+                    const script = document.createElement('script');
+                    script.src = sources[i++];
+                    script.async = true;
+                    script.onload = () => resolve(typeof Chart !== 'undefined');
+                    script.onerror = tryNext;
+                    document.head.appendChild(script);
+                };
+                tryNext();
+            });
+            return chartJsLoadPromise;
+        }
+
         function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel) {
+            if (typeof Chart === 'undefined') {
+                ensureChartJsLoaded().then(ok => {
+                    if (ok && typeof renderSummaryModule === 'function') renderSummaryModule();
+                });
+                return;
+            }
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
