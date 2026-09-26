@@ -616,14 +616,35 @@ window.CloudSync = (() => {
     async function refreshIfClean() {
         if (!configured() || syncing || !ready) return;
         // Only pull automatically when this browser has no unsaved local edits.
-        // That lets another browser's saved changes appear without destroying
-        // edits currently being made here.
+        // Do NOT redraw the whole dashboard when nothing changed remotely.
+        // Recreating Chart.js instances every 5 seconds causes visible chart
+        // animation/repetition and also collapses inline project timelines.
         try {
             for (const dataset of Object.keys(DATASETS)) {
                 const local = readArray(DATASETS[dataset].key);
                 if (!sameJson(local, lastSynced[dataset])) return;
             }
+            const before = {};
+            for (const dataset of Object.keys(DATASETS)) {
+                before[dataset] = JSON.stringify(readArray(DATASETS[dataset].key));
+            }
+            for (const [type, key] of Object.entries(CATEGORIES)) {
+                before[`cat:${type}`] = JSON.stringify(readArray(key));
+            }
+
             await pull();
+
+            let changed = false;
+            for (const dataset of Object.keys(DATASETS)) {
+                if (before[dataset] !== JSON.stringify(readArray(DATASETS[dataset].key))) { changed = true; break; }
+            }
+            if (!changed) {
+                for (const [type, key] of Object.entries(CATEGORIES)) {
+                    if (before[`cat:${type}`] !== JSON.stringify(readArray(key))) { changed = true; break; }
+                }
+            }
+            if (!changed) return;
+
             if (typeof renderAll === "function") renderAll();
             else if (typeof renderSummaryModule === "function") {
                 renderSummaryModule();
@@ -1065,7 +1086,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-chart-pie text-emerald-400"></i> Calibration Status Breakdown
                         </h4>
                         <div class="chart-box-container">
-                            <canvas id="chart-summary-calib" style="display:block;width:100%;height:100%;"></canvas>
+                            <canvas id="chart-summary-calib"></canvas>
                         </div>
                     </div>
 
@@ -1074,7 +1095,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress
                         </h4>
                         <div class="chart-box-container">
-                            <canvas id="chart-summary-projects" style="display:block;width:100%;height:100%;"></canvas>
+                            <canvas id="chart-summary-projects"></canvas>
                         </div>
                     </div>
 
@@ -1083,7 +1104,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-chart-bar text-amber-400"></i> Downtime Pareto by Line Category
                         </h4>
                         <div class="chart-box-container">
-                            <canvas id="chart-summary-pareto" style="display:block;width:100%;height:100%;"></canvas>
+                            <canvas id="chart-summary-pareto"></canvas>
                         </div>
                         <p class="text-[9px] text-slate-500 text-center">Total downtime hours by Line Category</p>
                     </div>
@@ -1583,7 +1604,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <span id="projects-chart-year-badge" class="text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">Filtered by Year</span>
                     </div>
                     <div class="chart-box-container" style="height: 220px !important; max-height: 220px !important;">
-                        <canvas id="chart-projects-mill" style="display:block;width:100%;height:100%;"></canvas>
+                        <canvas id="chart-projects-mill"></canvas>
                     </div>
                 </div>
 
@@ -2489,6 +2510,8 @@ window.addEventListener("cloudsync:status", (event) => {
         let chartSummaryProjects = null;
         let chartProjectsMill = null;
         let chartDowntimePareto = null;
+        // Keep inline project timelines open when background cloud refreshes redraw the project cards.
+        const expandedProjectTimelines = new Set();
 
         window.onload = function() {
             // Require login again after every browser refresh.
@@ -2905,17 +2928,11 @@ window.addEventListener("cloudsync:status", (event) => {
                 btn.classList.toggle("hidden", !isPageAllowed(m));
             });
 
-            if (mod === 'summary') {
-                renderSummaryModule();
-                requestAnimationFrame(() => { if (activeModule === 'summary') renderSummaryModule(); });
-            }
+            if (mod === 'summary') renderSummaryModule();
             if (mod === 'calibration') renderCalibModule();
             if (mod === 'uptime') renderDowntimeModule();
             if (mod === 'calendar') renderCalendarModule();
-            if (mod === 'projects') {
-                renderProjectsModule();
-                requestAnimationFrame(() => { if (activeModule === 'projects') renderProjectsModule(); });
-            }
+            if (mod === 'projects') renderProjectsModule();
 
             // Final authority pass protects against any render function changing
             // navigation classes.
@@ -3168,11 +3185,10 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            // Supporting details breakdown by plant
+            // Supporting details breakdown lists
             const calibSupp = document.getElementById("summary-per-plant-calib");
-            const projSupp = document.getElementById("summary-per-plant-projects");
-
-            // Use the same filtered records/KPI rules as the Executive Summary, but split them by Plant.
+            const scheduledTotal = Math.max(0, filteredEq.length - cNa);
+            const donePct = scheduledTotal ? ((cDone / scheduledTotal) * 100).toFixed(1) : '0.0';
             const plantNames = Array.from(new Set([
                 ...filteredEq.map(eq => String(eq.plant || "Unassigned Plant").trim()),
                 ...filteredPr.map(pr => String(pr.plant || "Unassigned Plant").trim())
@@ -3187,21 +3203,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 if (st === "DONE") calibByPlant[plant].done++;
             });
 
-            const projectByPlant = {};
-            filteredPr.forEach(pr => {
-                const plant = String(pr.plant || "Unassigned Plant").trim();
-                if (!projectByPlant[plant]) {
-                    projectByPlant[plant] = { inProgress: 0, planning: 0, onHold: 0, completed: 0 };
-                }
-                if (pr.status === "In Progress") projectByPlant[plant].inProgress++;
-                else if (pr.status === "Planning") projectByPlant[plant].planning++;
-                else if (pr.status === "On Hold") projectByPlant[plant].onHold++;
-                else if (pr.status === "Completed") projectByPlant[plant].completed++;
-            });
-
-            // Display each plant as a ROW so the supporting details stay compact and easy to scan.
-            calibSupp.innerHTML = plantNames.length
-                ? `<div class="overflow-x-auto">
+            calibSupp.innerHTML = plantNames.length ? `
+                <div class="overflow-x-auto">
                     <table class="w-full text-xs border-collapse">
                         <thead>
                             <tr class="border-b border-slate-700/60 text-slate-400">
@@ -3214,24 +3217,42 @@ window.addEventListener("cloudsync:status", (event) => {
                         <tbody>${plantNames.map(plant => {
                             const v = calibByPlant[plant] || { done: 0, scheduled: 0 };
                             const pct = v.scheduled ? ((v.done / v.scheduled) * 100).toFixed(1) : "0.0";
-                            return `
-                                <tr class="border-b border-slate-700/40 last:border-0 hover:bg-slate-900/40">
-                                    <td class="px-3 py-2 font-bold text-white">${escapeHtml(plant)}</td>
-                                    <td class="px-3 py-2 text-center font-bold text-emerald-400">${v.done}</td>
-                                    <td class="px-3 py-2 text-center text-slate-300">${v.scheduled}</td>
-                                    <td class="px-3 py-2 text-center font-semibold text-blue-300">${pct}%</td>
-                                </tr>`;
+                            return `<tr class="border-b border-slate-700/40 last:border-0">
+                                <td class="px-3 py-2 font-bold text-white">${escapeHtml(plant)}</td>
+                                <td class="px-3 py-2 text-center font-bold text-emerald-400">${v.done}</td>
+                                <td class="px-3 py-2 text-center text-slate-300">${v.scheduled}</td>
+                                <td class="px-3 py-2 text-center font-semibold text-blue-300">${pct}%</td>
+                            </tr>`;
                         }).join("")}</tbody>
                     </table>
-                </div>`
-                : `<div class="text-xs text-slate-500 italic py-2">No calibration records found for the selected filter.</div>`;
+                </div>` : `<div class="text-xs text-slate-500 italic py-2">No calibration records found.</div>`;
 
+            let pInProgress = 0, pPlanning = 0, pOnHold = 0, pCompleted = 0;
+            filteredPr.forEach(pr => {
+                const status = String(pr.status || "").trim();
+                if (status === "In Progress") pInProgress++;
+                else if (status === "Planning") pPlanning++;
+                else if (status === "On Hold") pOnHold++;
+                else if (status === "Completed") pCompleted++;
+            });
+
+            const projSupp = document.getElementById("summary-per-plant-projects");
             const projectViewAction = isPageAllowed("projects")
                 ? `<button type="button" onclick="openProjectsFromSummary()" class="mt-2 w-full px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/15 text-[10px] font-semibold transition"><i class="fa-solid fa-folder-open mr-1"></i> View Projects</button>`
                 : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
+            const projectByPlant = {};
+            filteredPr.forEach(pr => {
+                const plant = String(pr.plant || "Unassigned Plant").trim();
+                if (!projectByPlant[plant]) projectByPlant[plant] = { inProgress: 0, planning: 0, onHold: 0, completed: 0 };
+                const status = String(pr.status || "").trim();
+                if (status === "In Progress") projectByPlant[plant].inProgress++;
+                else if (status === "Planning") projectByPlant[plant].planning++;
+                else if (status === "On Hold") projectByPlant[plant].onHold++;
+                else if (status === "Completed") projectByPlant[plant].completed++;
+            });
 
-            projSupp.innerHTML = plantNames.length
-                ? `<div class="overflow-x-auto">
+            projSupp.innerHTML = plantNames.length ? `
+                <div class="overflow-x-auto">
                     <table class="w-full text-xs border-collapse">
                         <thead>
                             <tr class="border-b border-slate-700/60 text-slate-400">
@@ -3244,72 +3265,26 @@ window.addEventListener("cloudsync:status", (event) => {
                         </thead>
                         <tbody>${plantNames.map(plant => {
                             const v = projectByPlant[plant] || { inProgress: 0, planning: 0, onHold: 0, completed: 0 };
-                            return `
-                                <tr class="border-b border-slate-700/40 last:border-0 hover:bg-slate-900/40">
-                                    <td class="px-3 py-2 font-bold text-white">${escapeHtml(plant)}</td>
-                                    <td class="px-3 py-2 text-center font-bold text-blue-400">${v.inProgress}</td>
-                                    <td class="px-3 py-2 text-center font-bold text-amber-400">${v.planning}</td>
-                                    <td class="px-3 py-2 text-center font-bold text-orange-400">${v.onHold}</td>
-                                    <td class="px-3 py-2 text-center font-bold text-emerald-400">${v.completed}</td>
-                                </tr>`;
+                            return `<tr class="border-b border-slate-700/40 last:border-0">
+                                <td class="px-3 py-2 font-bold text-white">${escapeHtml(plant)}</td>
+                                <td class="px-3 py-2 text-center font-bold text-blue-400">${v.inProgress}</td>
+                                <td class="px-3 py-2 text-center font-bold text-amber-400">${v.planning}</td>
+                                <td class="px-3 py-2 text-center font-bold text-orange-400">${v.onHold}</td>
+                                <td class="px-3 py-2 text-center font-bold text-emerald-400">${v.completed}</td>
+                            </tr>`;
                         }).join("")}</tbody>
                     </table>
-                </div>${projectViewAction}`
-                : `<div class="text-xs text-slate-500 italic py-2">No project records found for the selected filter.</div>${projectViewAction}`;
+                </div>${projectViewAction}` : `<div class="text-xs text-slate-500 italic py-2">No project records found.</div>${projectViewAction}`;
 
             // Render summary charts
-            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto, filteredPr);
-            requestAnimationFrame(() => renderExecutiveProjectPlantChart(filteredPr));
+            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto);
         }
 
-        function renderExecutiveProjectPlantChart(filteredProjects) {
-            const canvas = document.getElementById('chart-summary-projects');
-            if (!canvas) return;
-            if (typeof Chart === 'undefined') {
-                setTimeout(() => renderExecutiveProjectPlantChart(filteredProjects), 300);
-                return;
-            }
-            const parent = canvas.parentElement;
-            if (parent) {
-                parent.style.height = '145px';
-                parent.style.minHeight = '145px';
-                parent.style.position = 'relative';
-            }
-            canvas.style.display = 'block';
-            canvas.style.width = '100%';
-            canvas.style.height = '145px';
-            canvas.width = Math.max(300, parent ? parent.clientWidth : 300);
-            canvas.height = 145;
-            if (chartSummaryProjects) { chartSummaryProjects.destroy(); chartSummaryProjects = null; }
-
-            const plants = ['Plant 1', 'Plant 2', 'PreMix'];
-            const counts = { 'In Progress':[0,0,0], 'Planning':[0,0,0], 'On Hold':[0,0,0], 'Completed':[0,0,0] };
-            (Array.isArray(filteredProjects) ? filteredProjects : []).forEach(pr => {
-                const pi = plants.indexOf(String(pr.plant || '').trim());
-                const status = String(pr.status || '').trim();
-                if (pi >= 0 && counts[status]) counts[status][pi]++;
-            });
-            chartSummaryProjects = new Chart(canvas.getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
-                    datasets: [
-                        {label:'In Progress',data:counts['In Progress'],backgroundColor:'#3b82f6',stack:'project-status',borderRadius:3},
-                        {label:'Planning',data:counts['Planning'],backgroundColor:'#eab308',stack:'project-status',borderRadius:3},
-                        {label:'On Hold',data:counts['On Hold'],backgroundColor:'#f97316',stack:'project-status',borderRadius:3},
-                        {label:'Completed',data:counts['Completed'],backgroundColor:'#22c55e',stack:'project-status',borderRadius:3}
-                    ]
-                },
-                options: {responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:9,padding:6,font:{size:8},color:'#94a3b8'}}},scales:{x:{stacked:true,ticks:{font:{size:9},color:'#94a3b8'},grid:{display:false}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:9},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,0.35)'}}}}
-            });
-        }
-
-        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto, filteredProjects) {
+        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto) {
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
-            if (typeof Chart === 'undefined') { setTimeout(() => renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto, filteredProjects), 300); return; }
-            if (!calibCanvas || !paretoCanvas) return;
+            if (!calibCanvas || !projCanvas || !paretoCanvas || typeof Chart === 'undefined') return;
 
             // 1) Calibration completion — no overdue categories.
             const ctxCalib = calibCanvas.getContext('2d');
@@ -3327,8 +3302,6 @@ window.addEventListener("cloudsync:status", (event) => {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    animation: false,
-                    transitions: { active: { animation: { duration: 0 } } },
                     cutout: '68%',
                     plugins: {
                         legend: { position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
@@ -3344,8 +3317,31 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             });
 
-            // 2) Project Distribution & Progress per Mill (Plant)
-            renderExecutiveProjectPlantChart(filteredProjects);
+            // 2) Project status
+            const ctxProj = projCanvas.getContext('2d');
+            if (chartSummaryProjects) chartSummaryProjects.destroy();
+            chartSummaryProjects = new Chart(ctxProj, {
+                type: 'bar',
+                data: {
+                    labels: ['In Progress', 'Planning', 'On Hold', 'Completed'],
+                    datasets: [{
+                        label: 'Projects',
+                        data: [pInProgress, pPlanning, pOnHold, pCompleted],
+                        backgroundColor: ['#3b82f6', '#eab308', '#ef4444', '#22c55e'],
+                        borderRadius: 5,
+                        maxBarThickness: 34
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51, 65, 85, 0.35)' } }
+                    }
+                }
+            });
 
             // 3) Pareto: total downtime by Line Category
             const ctxPareto = paretoCanvas.getContext('2d');
@@ -4226,14 +4222,18 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function toggleProjectTimeline(id) {
+            const key = String(id);
             const el = document.getElementById(`project-timeline-${id}`);
             const btn = document.getElementById(`project-view-btn-${id}`);
             if (!el) return;
-            const hidden = el.classList.toggle('hidden');
+            const willOpen = el.classList.contains('hidden');
+            el.classList.toggle('hidden', !willOpen);
+            if (willOpen) expandedProjectTimelines.add(key);
+            else expandedProjectTimelines.delete(key);
             if (btn) {
-                btn.innerHTML = hidden
-                    ? '<i class="fa-solid fa-eye mr-1"></i> View Timeline'
-                    : '<i class="fa-solid fa-eye-slash mr-1"></i> Hide Timeline';
+                btn.innerHTML = willOpen
+                    ? '<i class="fa-solid fa-eye-slash mr-1"></i> Hide Timeline'
+                    : '<i class="fa-solid fa-eye mr-1"></i> View Timeline';
             }
         }
 
@@ -4272,7 +4272,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const filtered = projectsList.filter(pr => {
                 if (currentPlant !== "ALL" && pr.plant !== currentPlant) return false;
-                if (yearFilter !== "ALL" && !pr.date.startsWith(yearFilter)) return false;
+                if (yearFilter !== "ALL" && !String(pr.date || "").startsWith(yearFilter)) return false;
                 return true;
             });
 
@@ -4290,20 +4290,20 @@ window.addEventListener("cloudsync:status", (event) => {
                         "Completed": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                     };
                     const tm = getTimelineMetrics(pr);
-                    const computed = tm.timelineProgress == null ? pr.progress : tm.timelineProgress;
+                    const computed = tm.timelineProgress == null ? Number(pr.progress || 0) : tm.timelineProgress;
                     const card = document.createElement("div");
                     card.className = "bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between space-y-4 shadow-lg";
                     card.innerHTML = `
                         <div class="space-y-2">
                             <div class="flex items-start justify-between gap-2">
                                 <h4 class="text-xs font-bold text-white uppercase tracking-wider">${escapeHtml(pr.title)}</h4>
-                                <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${statusColors[pr.status] || ''} whitespace-nowrap">${escapeHtml(pr.status)}</span>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${statusColors[pr.status] || ''} whitespace-nowrap">${escapeHtml(pr.status || 'Planning')}</span>
                             </div>
                             <div class="flex items-center gap-3 text-[11px] text-slate-400"><span><i class="fa-solid fa-building text-blue-400 mr-1"></i>${escapeHtml(pr.plant)}</span><span><i class="fa-solid fa-user-gear text-purple-400 mr-1"></i>${escapeHtml(pr.lead)}</span></div>
                         </div>
                         <div class="space-y-1.5">
-                            <div class="flex justify-between text-xs font-semibold"><span class="text-slate-400">Timeline Computed Progress</span><span class="text-white">${computed}%</span></div>
-                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-700"><div class="bg-cyan-500 h-full rounded-full transition-all duration-500" style="width:${computed}%"></div></div>
+                            <div class="flex justify-between text-xs font-semibold"><span class="text-slate-400">Project Progress</span><span class="text-white">${computed}%</span></div>
+                            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-700"><div class="bg-cyan-500 h-full rounded-full transition-all duration-500" style="width:${Math.max(0, Math.min(100, computed))}%"></div></div>
                         </div>
                         <p class="text-xs text-slate-300 bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">${escapeHtml(pr.notes || 'No milestones logged.')}</p>
                         <button id="project-view-btn-${pr.id}" type="button" onclick="toggleProjectTimeline(${pr.id})" class="w-full text-left px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/15 text-[11px] font-semibold transition">
@@ -4318,34 +4318,65 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
+            // Restore timeline expansion after any intentional project redraw.
+            filtered.forEach(pr => {
+                if (!expandedProjectTimelines.has(String(pr.id))) return;
+                const el = document.getElementById(`project-timeline-${pr.id}`);
+                const btn = document.getElementById(`project-view-btn-${pr.id}`);
+                if (el) el.classList.remove('hidden');
+                if (btn) btn.innerHTML = '<i class="fa-solid fa-eye-slash mr-1"></i> Hide Timeline';
+            });
+
             container.querySelectorAll(".admin-only").forEach(el => el.classList.toggle("hidden", !isAdminUser()));
 
-            // Project Distribution & Progress per Mill (Plant): show all four statuses.
-            const millPlants = ['Plant 1', 'Plant 2', 'PreMix'];
-            const millStatusCounts = { 'In Progress': [0,0,0], 'Planning': [0,0,0], 'On Hold': [0,0,0], 'Completed': [0,0,0] };
+            // Project Distribution & Progress per Mill: one stacked bar per plant,
+            // split by the actual project status. This stays synchronized with the
+            // same filtered project records used by the cards above.
+            const plants = ["Plant 1", "Plant 2", "PreMix"];
+            const statusCounts = {
+                "In Progress": plants.map(() => 0),
+                "Planning": plants.map(() => 0),
+                "On Hold": plants.map(() => 0),
+                "Completed": plants.map(() => 0)
+            };
             filtered.forEach(pr => {
-                const pi = millPlants.indexOf(String(pr.plant || '').trim());
-                if (pi >= 0 && millStatusCounts[pr.status]) millStatusCounts[pr.status][pi]++;
+                const pi = plants.indexOf(pr.plant);
+                if (pi < 0) return;
+                const status = String(pr.status || "Planning").trim();
+                if (!statusCounts[status]) statusCounts[status] = plants.map(() => 0);
+                statusCounts[status][pi] += 1;
             });
-            const ctxMill = document.getElementById('chart-projects-mill').getContext('2d');
-            if (chartProjectsMill) chartProjectsMill.destroy();
-            chartProjectsMill = new Chart(ctxMill, {
-                type: 'bar',
-                data: {
-                    labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
-                    datasets: [
-                        { label: 'In Progress', data: millStatusCounts['In Progress'], backgroundColor: '#3b82f6', borderRadius: 4, stack: 'project-status' },
-                        { label: 'Planning', data: millStatusCounts['Planning'], backgroundColor: '#eab308', borderRadius: 4, stack: 'project-status' },
-                        { label: 'On Hold', data: millStatusCounts['On Hold'], backgroundColor: '#f97316', borderRadius: 4, stack: 'project-status' },
-                        { label: 'Completed', data: millStatusCounts['Completed'], backgroundColor: '#22c55e', borderRadius: 4, stack: 'project-status' }
-                    ]
-                },
-                options: {
-                    responsive:true, maintainAspectRatio:false, animation:false,
-                    plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,padding:8,font:{size:9},color:'#94a3b8'}}},
-                    scales:{x:{stacked:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{display:false}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,0.4)'}}}
-                }
-            });
+
+            const millCanvas = document.getElementById('chart-projects-mill');
+            if (millCanvas && typeof Chart !== 'undefined') {
+                const ctxMill = millCanvas.getContext('2d');
+                if (chartProjectsMill) chartProjectsMill.destroy();
+                chartProjectsMill = new Chart(ctxMill, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
+                        datasets: [
+                            { label: 'In Progress', data: statusCounts['In Progress'], backgroundColor: '#3b82f6', borderRadius: 4 },
+                            { label: 'Planning', data: statusCounts['Planning'], backgroundColor: '#eab308', borderRadius: 4 },
+                            { label: 'On Hold', data: statusCounts['On Hold'], backgroundColor: '#ef4444', borderRadius: 4 },
+                            { label: 'Completed', data: statusCounts['Completed'], backgroundColor: '#22c55e', borderRadius: 4 }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 250 },
+                        plugins: {
+                            legend: { display: true, position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
+                            tooltip: { mode: 'index', intersect: false }
+                        },
+                        scales: {
+                            x: { stacked: true, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
+                            y: { stacked: true, beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.4)' } }
+                        }
+                    }
+                });
+            }
         }
 
         function openProjectModal() {
