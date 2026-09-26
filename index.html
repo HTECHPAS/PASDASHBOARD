@@ -3189,10 +3189,8 @@ window.addEventListener("cloudsync:status", (event) => {
             const calibSupp = document.getElementById("summary-per-plant-calib");
             const scheduledTotal = Math.max(0, filteredEq.length - cNa);
             const donePct = scheduledTotal ? ((cDone / scheduledTotal) * 100).toFixed(1) : '0.0';
-            const plantNames = Array.from(new Set([
-                ...filteredEq.map(eq => String(eq.plant || "Unassigned Plant").trim()),
-                ...filteredPr.map(pr => String(pr.plant || "Unassigned Plant").trim())
-            ].filter(Boolean))).sort((a, b) => a.localeCompare(b));
+            const allSummaryPlants = ["Plant 1", "Plant 2", "PreMix"];
+            const plantNames = allSummaryPlants.filter(plant => currentPlant === "ALL" || currentPlant === plant);
 
             const calibByPlant = {};
             filteredEq.forEach(eq => {
@@ -3277,6 +3275,49 @@ window.addEventListener("cloudsync:status", (event) => {
                 </div>${projectViewAction}` : `<div class="text-xs text-slate-500 italic py-2">No project records found.</div>${projectViewAction}`;
 
             // Render summary charts
+            // Project Status & Progress: same plant-by-status stacked-bar logic used by
+            // Automation Projects > Project Distribution & Progress per Mill (Plant).
+            const summaryPlants = ["Plant 1", "Plant 2", "PreMix"];
+            const summaryStatusCounts = {
+                "In Progress": summaryPlants.map(() => 0),
+                "Planning": summaryPlants.map(() => 0),
+                "On Hold": summaryPlants.map(() => 0),
+                "Completed": summaryPlants.map(() => 0)
+            };
+            filteredPr.forEach(pr => {
+                const pi = summaryPlants.indexOf(String(pr.plant || "").trim());
+                if (pi < 0) return;
+                const status = String(pr.status || "Planning").trim();
+                if (summaryStatusCounts[status]) summaryStatusCounts[status][pi] += 1;
+            });
+            const summaryProjectCanvas = document.getElementById("chart-summary-projects");
+            if (summaryProjectCanvas && typeof Chart !== "undefined") {
+                const ctxSummaryProjects = summaryProjectCanvas.getContext("2d");
+                if (window.chartSummaryProjects) window.chartSummaryProjects.destroy();
+                window.chartSummaryProjects = new Chart(ctxSummaryProjects, {
+                    type: "bar",
+                    data: {
+                        labels: ["Plant 1", "Plant 2", "PreMix Plant"],
+                        datasets: [
+                            { label: "In Progress", data: summaryStatusCounts["In Progress"], backgroundColor: "#3b82f6", borderRadius: 4 },
+                            { label: "Planning", data: summaryStatusCounts["Planning"], backgroundColor: "#eab308", borderRadius: 4 },
+                            { label: "On Hold", data: summaryStatusCounts["On Hold"], backgroundColor: "#ef4444", borderRadius: 4 },
+                            { label: "Completed", data: summaryStatusCounts["Completed"], backgroundColor: "#22c55e", borderRadius: 4 }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 10 } } } },
+                        scales: {
+                            x: { stacked: true, ticks: { color: "#94a3b8", font: { size: 10 } }, grid: { display: false } },
+                            y: { stacked: true, beginAtZero: true, ticks: { color: "#94a3b8", stepSize: 1 }, grid: { color: "rgba(148,163,184,0.08)" } }
+                        }
+                    }
+                });
+            }
+
             renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto);
         }
 
@@ -4332,7 +4373,7 @@ window.addEventListener("cloudsync:status", (event) => {
             // Project Distribution & Progress per Mill: one stacked bar per plant,
             // split by the actual project status. This stays synchronized with the
             // same filtered project records used by the cards above.
-            const plants = ["Plant 1", "Plant 2", "PreMix"];
+            const plants = ["Plant 1", "Plant 2", "PreMix"].filter(plant => currentPlant === "ALL" || currentPlant === plant);
             const statusCounts = {
                 "In Progress": plants.map(() => 0),
                 "Planning": plants.map(() => 0),
