@@ -3576,243 +3576,82 @@ window.addEventListener("cloudsync:status", (event) => {
             return chartJsLoadPromise;
         }
 
-        function renderSummaryFallbackCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel) {
-            const makeBar = (label, value, max, cls) => {
-                const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
-                return `<div class="flex items-center gap-2 text-[9px] mb-1.5"><span class="w-20 shrink-0 text-slate-300 truncate">${escapeHtml(label)}</span><div class="flex-1 h-3 bg-slate-900 rounded overflow-hidden"><div class="h-full ${cls}" style="width:${pct}%"></div></div><span class="w-12 text-right text-slate-300 font-bold">${Number(value || 0).toFixed(1)}</span></div>`;
-            };
-            const box = (canvasId, html) => {
-                const c = document.getElementById(canvasId); if (!c) return;
-                c.style.display = 'none';
-                let host = c.parentElement.querySelector('.summary-fallback-chart');
-                if (!host) { host = document.createElement('div'); host.className = 'summary-fallback-chart w-full h-full overflow-auto';
-                host.style.minHeight = '150px';
-                host.style.display = 'block'; c.parentElement.appendChild(host); }
-                host.innerHTML = html;
-            };
-            const periods = paretoComparison ? [{label:paretoComparison.primaryLabel,done:cDone,remaining:cRemaining},{label:comparePeriodLabel||paretoComparison.compareLabel,done:compareDone||0,remaining:compareRemaining||0}] : [{label:'Selected Period',done:cDone,remaining:cRemaining}];
-            const calibMax = Math.max(1, ...periods.map(x=>x.done+x.remaining));
-            box('chart-summary-calib', periods.map(x=>`<div class="mb-3"><div class="text-[9px] text-slate-400 font-bold mb-1">${escapeHtml(x.label)}</div>${makeBar('DONE',x.done,calibMax,'bg-emerald-500')}${makeBar('REMAINING',x.remaining,calibMax,'bg-slate-600')}</div>`).join(''));
-            const plants = selectedPlant && selectedPlant !== 'ALL' ? ['Plant 1','Plant 2','PreMix'].filter(p=>normalizePlant(p)===normalizePlant(selectedPlant)) : ['Plant 1','Plant 2','PreMix'];
-            const keys=['In Progress','Planning','On Hold','Completed'];
-            const classes=['bg-blue-500','bg-yellow-500','bg-red-500','bg-emerald-500'];
-            const projectHtml = plants.map(p=>{ const a=projectByPlant?.[p]||{}; const b=compareProjectByPlant?.[p]||{}; const total=Math.max(1,...keys.map(k=>Number(a[k]||0)),...(paretoComparison?keys.map(k=>Number(b[k]||0)):[])); const row=(obj,label)=>`<div class="mb-2"><div class="text-[9px] text-slate-400 font-bold mb-1">${escapeHtml(label)}</div>${keys.map((k,i)=>makeBar(k,obj[k]||0,total,classes[i])).join('')}</div>`; return `<div class="border-b border-slate-700/40 pb-2 mb-2"><div class="text-[9px] text-white font-bold mb-1">${escapeHtml(p==='PreMix'?'PreMix Plant':p)}</div>${row(a,paretoComparison?paretoComparison.primaryLabel:'Status')}${paretoComparison?row(b,comparePeriodLabel||paretoComparison.compareLabel):''}</div>`; }).join('');
-            box('chart-summary-projects', projectHtml || '<div class="text-slate-500 text-xs">No project data.</div>');
-            const items = sortedLinePareto || []; const compareItems=paretoComparison?.compare||[]; const map={}; items.forEach(i=>map[i.line]={p:Number(i.duration||0),c:0}); compareItems.forEach(i=>{if(!map[i.line])map[i.line]={p:0,c:0};map[i.line].c=Number(i.duration||0)}); const rows=Object.entries(map).sort((a,b)=>(b[1].p+b[1].c)-(a[1].p+a[1].c)); const max=Math.max(1,...rows.map(x=>Math.max(x[1].p,x[1].c)));
-            box('chart-summary-pareto', rows.length ? rows.map(([line,v])=>`<div class="mb-2">${makeBar(line,v.p,max,'bg-amber-500')}${paretoComparison?makeBar((comparePeriodLabel||'Compare')+' • '+line,v.c,max,'bg-blue-500'):''}</div>`).join('') : '<div class="text-slate-500 text-xs text-center py-8">No downtime data for this period.</div>');
-        }
-
-        function renderSummaryDataFallback(canvas, config, chartName) {
-            if (!canvas || !canvas.parentElement) return;
-            canvas.style.display = 'none';
-            let host = canvas.parentElement.querySelector('.summary-fallback-chart');
-            if (!host) {
-                host = document.createElement('div');
-                host.className = 'summary-fallback-chart w-full overflow-auto';
-                host.style.minHeight = '150px';
-                host.style.maxHeight = '175px';
-                host.style.display = 'block';
-                canvas.parentElement.appendChild(host);
+        // Executive Summary charts are rendered with native SVG/HTML first.
+        // This keeps all graphs visible even when an external Chart.js CDN is blocked.
+        function summarySvgEscape(value) { return escapeHtml(value); }
+        function summaryBarChart(labels, series, options = {}) {
+            const width = 520, height = 190, left = 34, right = 12, top = 16, bottom = 48;
+            const plotW = width - left - right, plotH = height - top - bottom;
+            const vals = series.flatMap(s => s.data.map(v => Number(v) || 0));
+            const max = Math.max(1, ...vals);
+            const groupW = labels.length ? plotW / labels.length : plotW;
+            const n = Math.max(1, series.length);
+            const barW = Math.max(8, Math.min(28, (groupW * .72) / n));
+            let svg = `<svg viewBox="0 0 ${width} ${height}" width="100%" height="100%" role="img" aria-label="${summarySvgEscape(options.title || 'Summary chart')}">`;
+            svg += `<line x1="${left}" y1="${top+plotH}" x2="${width-right}" y2="${top+plotH}" stroke="#475569" stroke-width="1"/>`;
+            for (let i=0;i<=4;i++) {
+                const y=top+plotH-(plotH*i/4), v=max*i/4;
+                svg += `<line x1="${left}" y1="${y}" x2="${width-right}" y2="${y}" stroke="#334155" stroke-width="1" opacity=".45"/>`;
+                svg += `<text x="${left-4}" y="${y+3}" text-anchor="end" font-size="8" fill="#94a3b8">${v.toFixed(options.decimals||0)}</text>`;
             }
-            const data = config?.data || {};
-            const labels = Array.isArray(data.labels) ? data.labels : [];
-            const datasets = Array.isArray(data.datasets) ? data.datasets : [];
-            const rows = labels.map((label, i) => ({
-                label: String(label),
-                values: datasets.map(ds => Number(ds?.data?.[i] || 0)),
-                names: datasets.map(ds => String(ds?.label || 'Value'))
-            }));
-            const max = Math.max(1, ...rows.flatMap(r => r.values));
-            const isPareto = String(chartName).toLowerCase().includes('pareto');
-            const isProject = String(chartName).toLowerCase().includes('project');
-            const fmt = v => Number(v).toFixed(isPareto ? 1 : 0);
-            const make = (label, value, color) => {
-                const pct = Math.max(0, Math.min(100, (value / max) * 100));
-                return `<div class="flex items-center gap-2 mb-1.5 min-w-0">` +
-                    `<span class="w-28 shrink-0 truncate text-[9px] text-slate-300" title="${escapeHtml(label)}">${escapeHtml(label)}</span>` +
-                    `<div class="flex-1 h-3 bg-slate-900 rounded overflow-hidden"><div class="h-full" style="width:${pct}%;background:${color};"></div></div>` +
-                    `<span class="w-14 shrink-0 text-right text-[9px] text-slate-200 font-bold">${fmt(value)}</span></div>`;
-            };
-            const colors = ['#22c55e','#334155','#3b82f6','#eab308','#ef4444','#6366f1','#14b8a6','#f97316'];
-            let html = '';
-            if (!rows.length) {
-                html = '<div class="text-slate-500 text-xs text-center py-8">No data available for this period.</div>';
-            } else if (isProject) {
-                html = rows.map(r => {
-                    const total = Math.max(1, ...r.values);
-                    return `<div class="mb-2"><div class="text-[9px] text-slate-300 font-bold mb-1">${escapeHtml(r.label)}</div>` +
-                        r.values.map((v,j) => {
-                            const pct=Math.max(0,Math.min(100,(v/total)*100));
-                            return `<div class="flex items-center gap-2 mb-1"><span class="w-28 shrink-0 truncate text-[8px] text-slate-400">${escapeHtml(r.names[j])}</span><div class="flex-1 h-2.5 bg-slate-900 rounded overflow-hidden"><div class="h-full" style="width:${pct}%;background:${colors[j%colors.length]};"></div></div><span class="w-8 text-right text-[8px] text-slate-200 font-bold">${fmt(v)}</span></div>`;
-                        }).join('') + '</div>';
-                }).join('');
-            } else {
-                html = rows.map(r => r.values.map((v,j) => make(r.values.length > 1 ? `${r.label} • ${r.names[j]}` : r.label, v, colors[j%colors.length])).join('')).join('');
-            }
-            host.innerHTML = html;
-        }
-
-        function createSummaryChart(canvas, config, chartName) {
-            try {
-                if (typeof Chart === 'undefined') throw new Error('Chart.js is not loaded');
-                return new Chart(canvas.getContext('2d'), config);
-            } catch (error) {
-                console.error(`Executive Summary ${chartName} chart failed:`, error);
-                renderSummaryDataFallback(canvas, config, chartName);
-                return null;
-            }
-        }
-
-        function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel) {
-            if (typeof Chart === 'undefined') {
-                renderSummaryFallbackCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel);
-                ensureChartJsLoaded().then(ok => {
-                    if (ok && typeof renderSummaryModule === 'function') renderSummaryModule();
+            labels.forEach((lab,i)=>{
+                const gx=left+i*groupW+groupW/2;
+                series.forEach((sr,j)=>{
+                    const v=Number(sr.data[i]||0), bh=(v/max)*plotH;
+                    const x=gx-(n*barW)/2+j*barW, y=top+plotH-bh;
+                    svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(2,barW-2).toFixed(1)}" height="${Math.max(0,bh).toFixed(1)}" rx="2" fill="${sr.color}"/>`;
+                    if (v>0) svg += `<text x="${(x+barW/2).toFixed(1)}" y="${Math.max(10,y-3).toFixed(1)}" text-anchor="middle" font-size="8" fill="#e2e8f0">${v.toFixed(options.decimals||0)}</text>`;
                 });
-                return;
+                const short=String(lab).length>12?String(lab).slice(0,12)+'…':String(lab);
+                svg += `<text x="${gx}" y="${height-28}" text-anchor="middle" font-size="8" fill="#94a3b8">${summarySvgEscape(short)}</text>`;
+            });
+            if (options.legend) {
+                let x=left, y=height-8;
+                options.legend.forEach(item=>{ svg += `<rect x="${x}" y="${y-8}" width="7" height="7" rx="1" fill="${item.color}"/><text x="${x+10}" y="${y-2}" font-size="8" fill="#94a3b8">${summarySvgEscape(item.label)}</text>`; x += 10 + String(item.label).length*5.1 + 12; });
             }
-            const calibCanvas = document.getElementById('chart-summary-calib');
-            const projCanvas = document.getElementById('chart-summary-projects');
-            const paretoCanvas = document.getElementById('chart-summary-pareto');
-            if (!calibCanvas || !projCanvas || !paretoCanvas || typeof Chart === 'undefined') return;
-
-            [calibCanvas, projCanvas, paretoCanvas].forEach(canvas => {
-                canvas.style.display = 'block';
-                canvas.style.width = '100%';
-                canvas.style.height = '175px';
-                const fallback = canvas.parentElement?.querySelector('.summary-fallback-chart');
-                if (fallback) fallback.remove();
-                // Chart.js keeps a registry entry for every canvas. Destroy the
-                // registered chart as well as our local reference before redraw.
-                try {
-                    const existing = Chart.getChart(canvas);
-                    if (existing) existing.destroy();
-                } catch (_) {}
-            });
-
-            // 1) Calibration completion — no overdue categories.
-            const ctxCalib = calibCanvas.getContext('2d');
-            if (chartSummaryCalib) chartSummaryCalib.destroy();
-            chartSummaryCalib = createSummaryChart(calibCanvas, {
-                type: paretoComparison ? 'bar' : 'doughnut',
-                data: paretoComparison ? {
-                    labels: [paretoComparison.primaryLabel, paretoComparison.compareLabel],
-                    datasets: [
-                        { label: 'DONE', data: [cDone, compareDone || 0], backgroundColor: '#22c55e', borderRadius: 4 },
-                        { label: 'REMAINING', data: [cRemaining, compareRemaining || 0], backgroundColor: '#334155', borderRadius: 4 }
-                    ]
-                } : {
-                    labels: ['DONE', 'REMAINING'],
-                    datasets: [{
-                        data: [cDone, cRemaining],
-                        backgroundColor: ['#22c55e', '#334155'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    ...(paretoComparison ? { scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.35)' } } } } : { cutout: '68%' }),
-                    plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
-                        tooltip: { callbacks: {
-                            label: function(ctx) {
-                                const total = ctx.dataset.data.reduce((a,b) => a + b, 0);
-                                const n = ctx.raw || 0;
-                                const pct = total ? ((n / total) * 100).toFixed(1) : '0.0';
-                                return `${ctx.label}: ${n} (${pct}%)`;
-                            }
-                        }}
-                    }
-                }
-            });
-
-            // 2) Project Status & Progress — same stacked-bar indication as Automation Projects.
-            const ctxProj = projCanvas.getContext('2d');
-            if (chartSummaryProjects) chartSummaryProjects.destroy();
-            const allSummaryPlants = ['Plant 1', 'Plant 2', 'PreMix'];
-            const chartPlants = selectedPlant && selectedPlant !== 'ALL'
-                ? allSummaryPlants.filter(p => normalizePlant(p) === normalizePlant(selectedPlant))
-                : allSummaryPlants;
-            const chartLabels = chartPlants.map(p => p === 'PreMix' ? 'PreMix Plant' : p);
-            const getSeries = key => chartPlants.map(p => Number(projectByPlant?.[p]?.[key] || 0));
-            const getCompareSeries = key => chartPlants.map(p => Number(compareProjectByPlant?.[p]?.[key] || 0));
-            const projectDatasets = paretoComparison ? [
-                { label: `${paretoComparison.primaryLabel} - In Progress`, data: getSeries('In Progress'), backgroundColor: '#3b82f6', borderRadius: 4 },
-                { label: `${paretoComparison.primaryLabel} - Planning`, data: getSeries('Planning'), backgroundColor: '#eab308', borderRadius: 4 },
-                { label: `${paretoComparison.primaryLabel} - On Hold`, data: getSeries('On Hold'), backgroundColor: '#ef4444', borderRadius: 4 },
-                { label: `${paretoComparison.primaryLabel} - Completed`, data: getSeries('Completed'), backgroundColor: '#22c55e', borderRadius: 4 },
-                { label: `${comparePeriodLabel} - In Progress`, data: getCompareSeries('In Progress'), backgroundColor: '#60a5fa', borderRadius: 4 },
-                { label: `${comparePeriodLabel} - Planning`, data: getCompareSeries('Planning'), backgroundColor: '#facc15', borderRadius: 4 },
-                { label: `${comparePeriodLabel} - On Hold`, data: getCompareSeries('On Hold'), backgroundColor: '#f87171', borderRadius: 4 },
-                { label: `${comparePeriodLabel} - Completed`, data: getCompareSeries('Completed'), backgroundColor: '#4ade80', borderRadius: 4 }
-            ] : [
-                { label: 'In Progress', data: getSeries('In Progress'), backgroundColor: '#3b82f6', borderRadius: 4 },
-                { label: 'Planning', data: getSeries('Planning'), backgroundColor: '#eab308', borderRadius: 4 },
-                { label: 'On Hold', data: getSeries('On Hold'), backgroundColor: '#ef4444', borderRadius: 4 },
-                { label: 'Completed', data: getSeries('Completed'), backgroundColor: '#22c55e', borderRadius: 4 }
-            ];
-            chartSummaryProjects = createSummaryChart(projCanvas, {
-                type: 'bar',
-                data: {
-                    labels: chartLabels,
-                    datasets: projectDatasets
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
-                    plugins: {
-                        legend: { display: true, position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
-                        tooltip: { mode: 'index', intersect: false }
-                    },
-                    scales: {
-                        x: { stacked: !paretoComparison, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { stacked: !paretoComparison, beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.4)' } }
-                    }
-                }
-            });
-
-            // 3) Pareto: total downtime by Line Category. In comparison mode,
-            // each line shows the computed total for both selected periods.
-            const ctxPareto = paretoCanvas.getContext('2d');
-            if (chartSummaryPareto) chartSummaryPareto.destroy();
-            const lineItems = sortedLinePareto || [];
-            const compareItems = paretoComparison?.compare || [];
-            const byLine = {};
-            lineItems.forEach(i => byLine[i.line] = { primary: Number(i.duration || 0), compare: 0 });
-            compareItems.forEach(i => { if (!byLine[i.line]) byLine[i.line] = { primary: 0, compare: 0 }; byLine[i.line].compare = Number(i.duration || 0); });
-            const paretoRows = Object.entries(byLine).sort((a,b) => (b[1].primary + b[1].compare) - (a[1].primary + a[1].compare));
-            const labels = paretoRows.length ? paretoRows.map(([line]) => line.length > 18 ? line.slice(0,18) + '…' : line) : ['No Data'];
-            const primaryData = paretoRows.length ? paretoRows.map(([,v]) => Number(v.primary.toFixed(1))) : [0];
-            const compareData = paretoRows.length ? paretoRows.map(([,v]) => Number(v.compare.toFixed(1))) : [];
-            const totalForCumulative = paretoRows.reduce((sum, [,v]) => sum + v.primary + (paretoComparison ? v.compare : 0), 0);
-            let cumulative = 0;
-            const cumulativePct = paretoRows.map(([,v]) => {
-                cumulative += totalForCumulative ? ((v.primary + (paretoComparison ? v.compare : 0)) / totalForCumulative) * 100 : 0;
-                return Number(cumulative.toFixed(1));
-            });
-            const datasets = [];
-            if (paretoComparison) {
-                datasets.push({ label: paretoComparison.primaryLabel, data: primaryData, backgroundColor: '#f59e0b', borderRadius: 4, maxBarThickness: 22, order: 2 });
-                datasets.push({ label: paretoComparison.compareLabel, data: compareData, backgroundColor: '#3b82f6', borderRadius: 4, maxBarThickness: 22, order: 2 });
+            return svg+'</svg>';
+        }
+        function summaryDoughnut(done, remaining, compareDone, compareRemaining, compare) {
+            const w=520,h=190,cx=100,cy=88,r=58,stroke=24,total=Math.max(1,done+remaining);
+            const circ=2*Math.PI*r, doneLen=circ*(done/total);
+            let svg=`<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" role="img" aria-label="Calibration status breakdown">`;
+            if (compare) {
+                const t2=Math.max(1,compareDone+compareRemaining), c2=2*Math.PI*r, d2=c2*(compareDone/t2);
+                svg += `<text x="70" y="18" text-anchor="middle" font-size="9" fill="#94a3b8">${summarySvgEscape('Period 1')}</text><circle cx="70" cy="88" r="42" fill="none" stroke="#334155" stroke-width="18"/><circle cx="70" cy="88" r="42" fill="none" stroke="#22c55e" stroke-width="18" stroke-dasharray="${(2*Math.PI*42*(done/t1Safe(done,remaining))).toFixed(1)} ${2*Math.PI*42}" transform="rotate(-90 70 88)"/>`;
+                svg += `<text x="205" y="18" text-anchor="middle" font-size="9" fill="#94a3b8">${summarySvgEscape('Period 2')}</text><circle cx="205" cy="88" r="42" fill="none" stroke="#334155" stroke-width="18"/><circle cx="205" cy="88" r="42" fill="none" stroke="#22c55e" stroke-width="18" stroke-dasharray="${(2*Math.PI*42*(compareDone/t2)).toFixed(1)} ${2*Math.PI*42}" transform="rotate(-90 205 88)"/>`;
+                svg += `<text x="70" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#e2e8f0">${done}/${done+remaining}</text><text x="205" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#e2e8f0">${compareDone}/${compareDone+compareRemaining}</text>`;
+                svg += `<text x="330" y="58" font-size="9" fill="#22c55e">● DONE</text><text x="330" y="78" font-size="9" fill="#94a3b8">● REMAINING</text><text x="330" y="108" font-size="9" fill="#94a3b8">Period 1: ${done}</text><text x="330" y="126" font-size="9" fill="#94a3b8">Period 2: ${compareDone}</text>`;
             } else {
-                datasets.push({ label: 'Downtime (hrs)', data: primaryData, backgroundColor: '#f59e0b', borderRadius: 4, maxBarThickness: 22, order: 2 });
+                svg += `<circle cx="100" cy="88" r="58" fill="none" stroke="#334155" stroke-width="24"/><circle cx="100" cy="88" r="58" fill="none" stroke="#22c55e" stroke-width="24" stroke-dasharray="${doneLen} ${circ}" transform="rotate(-90 100 88)"/>`;
+                svg += `<text x="100" y="84" text-anchor="middle" font-size="18" font-weight="800" fill="#e2e8f0">${done}</text><text x="100" y="101" text-anchor="middle" font-size="9" fill="#94a3b8">DONE</text>`;
+                svg += `<text x="210" y="72" font-size="10" fill="#22c55e">● DONE: ${done}</text><text x="210" y="94" font-size="10" fill="#94a3b8">● REMAINING: ${remaining}</text>`;
             }
-            datasets.push({ type: 'line', label: paretoComparison ? 'Cumulative % (combined)' : 'Cumulative %', data: paretoRows.length ? cumulativePct : [0], borderColor: '#38bdf8', backgroundColor: '#38bdf8', borderWidth: 2, pointRadius: 2, tension: 0.25, yAxisID: 'y1', order: 1 });
-            chartSummaryPareto = createSummaryChart(paretoCanvas, {
-                type: 'bar',
-                data: { labels, datasets },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, tooltip: { callbacks: {
-                        label: ctx => String(ctx.dataset.label || '').startsWith('Cumulative %') ? `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%` : `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)} hrs`
-                    }}},
-                    scales: {
-                        x: { ticks: { font: { size: 8 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.35)' } },
-                        y1: { beginAtZero: true, min: 0, max: 100, position: 'right', ticks: { font: { size: 8 }, color: '#38bdf8', callback: value => `${value}%` }, grid: { drawOnChartArea: false } }
-                    }
-                }
-            });
+            return svg+'</svg>';
+        }
+        function t1Safe(done,remaining){ return Math.max(1,done+remaining); }
+        function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel) {
+            const setChartHost=(id,html)=>{ const c=document.getElementById(id); if(!c?.parentElement)return; c.style.display='none'; let h=c.parentElement.querySelector('.summary-native-chart'); if(!h){h=document.createElement('div');h.className='summary-native-chart w-full';h.style.height='175px';c.parentElement.appendChild(h);} h.innerHTML=html; };
+            const period1=paretoComparison?.primaryLabel||'Selected Period', period2=comparePeriodLabel||paretoComparison?.compareLabel||'Comparison';
+            setChartHost('chart-summary-calib',summaryDoughnut(Number(cDone)||0,Number(cRemaining)||0,Number(compareDone)||0,Number(compareRemaining)||0,!!paretoComparison));
+            const plants=selectedPlant&&selectedPlant!=='ALL'?['Plant 1','Plant 2','PreMix'].filter(p=>normalizePlant(p)===normalizePlant(selectedPlant)):['Plant 1','Plant 2','PreMix'];
+            const projectSeries=[
+                {key:'In Progress',color:'#3b82f6'},{key:'Planning',color:'#eab308'},{key:'On Hold',color:'#ef4444'},{key:'Completed',color:'#22c55e'}
+            ];
+            let projectSvg='';
+            if(paretoComparison){
+                const labels=plants.map(p=>p==='PreMix'?'PreMix Plant':p), series=[];
+                projectSeries.forEach((s)=>{series.push({label:`${period1} ${s.key}`,data:plants.map(p=>Number(projectByPlant?.[p]?.[s.key]||0)),color:s.color});series.push({label:`${period2} ${s.key}`,data:plants.map(p=>Number(compareProjectByPlant?.[p]?.[s.key]||0)),color:s.color});});
+                projectSvg=summaryBarChart(labels,series,{title:'Project status comparison',legend:series.map(s=>({label:s.label,color:s.color})),decimals:0});
+            }else{
+                const labels=plants.map(p=>p==='PreMix'?'PreMix Plant':p),series=projectSeries.map(s=>({label:s.key,data:plants.map(p=>Number(projectByPlant?.[p]?.[s.key]||0)),color:s.color}));
+                projectSvg=summaryBarChart(labels,series,{title:'Project status',legend:series.map(s=>({label:s.label,color:s.color})),decimals:0});
+            }
+            setChartHost('chart-summary-projects',projectSvg);
+            const rows=[]; const pm={}; (sortedLinePareto||[]).forEach(i=>pm[i.line]={p:Number(i.duration)||0,c:0}); (paretoComparison?.compare||[]).forEach(i=>{if(!pm[i.line])pm[i.line]={p:0,c:0};pm[i.line].c=Number(i.duration)||0;});
+            Object.entries(pm).sort((a,b)=>(b[1].p+b[1].c)-(a[1].p+a[1].c)).forEach(([line,v])=>rows.push({line,p:Number(v.p.toFixed(1)),c:Number(v.c.toFixed(1))}));
+            const labels=rows.length?rows.map(x=>x.line):['No Data'];
+            const series=paretoComparison?[{label:period1,data:rows.map(x=>x.p),color:'#f59e0b'},{label:period2,data:rows.map(x=>x.c),color:'#3b82f6'}]:[{label:'Downtime (hrs)',data:rows.map(x=>x.p),color:'#f59e0b'}];
+            setChartHost('chart-summary-pareto',summaryBarChart(labels,series,{title:'Downtime Pareto',legend:series.map(s=>({label:s.label,color:s.color})),decimals:1}));
         }
 
         // --- MODULE 1: CALIBRATION TRACKER ---
