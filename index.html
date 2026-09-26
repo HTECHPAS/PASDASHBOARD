@@ -3118,7 +3118,9 @@ window.addEventListener("cloudsync:status", (event) => {
                 else cNa++;
             });
 
-            const totalScheduledCalib = filteredEq.length - cNa;
+            // Executive Summary counts every instrument; NO CALIB SCHED / N/A remain counted.
+            // DONE and OVERDUE, DONE are both treated as completed.
+            const totalScheduledCalib = filteredEq.length;
             const calibCompliance = totalScheduledCalib > 0 ? Math.round((cDone / totalScheduledCalib) * 100) : 0;
 
             document.getElementById("summary-calib-compliance").innerText = `${calibCompliance}%`;
