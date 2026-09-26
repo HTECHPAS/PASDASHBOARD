@@ -3153,9 +3153,15 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // The first period drives the normal KPI/supporting details. Compare mode
             // additionally computes a second period for the Pareto comparison.
+            const matchesAnyEquipmentDate = (eq, type, value) => {
+                if (type === "all" || !value) return true;
+                const dates = [eq.extSched, eq.extCalib, eq.intSched, eq.intCalib].filter(Boolean);
+                return dates.length ? dates.some(d => matchesSummaryDate(d, type, value)) : false;
+            };
+
             const filteredEq = equipmentList.filter(eq => {
                 if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
-                return matchesSummaryDate(eq.extCalib || eq.extSched || eq.intCalib || eq.intSched, primaryType, primaryValue);
+                return matchesAnyEquipmentDate(eq, primaryType, primaryValue);
             });
             const filteredDt = downtimeLogs.filter(dt => {
                 if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
@@ -3168,7 +3174,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const comparisonEq = isCompare ? equipmentList.filter(eq => {
                 if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
-                return matchesSummaryDate(eq.extCalib || eq.extSched || eq.intCalib || eq.intSched, compareType, compareValue);
+                return matchesAnyEquipmentDate(eq, compareType, compareValue);
             }) : [];
             const comparisonPr = isCompare ? projectsList.filter(pr => {
                 if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
@@ -3539,7 +3545,9 @@ window.addEventListener("cloudsync:status", (event) => {
                 const c = document.getElementById(canvasId); if (!c) return;
                 c.style.display = 'none';
                 let host = c.parentElement.querySelector('.summary-fallback-chart');
-                if (!host) { host = document.createElement('div'); host.className = 'summary-fallback-chart w-full h-full overflow-auto'; c.parentElement.appendChild(host); }
+                if (!host) { host = document.createElement('div'); host.className = 'summary-fallback-chart w-full h-full overflow-auto';
+                host.style.minHeight = '150px';
+                host.style.display = 'block'; c.parentElement.appendChild(host); }
                 host.innerHTML = html;
             };
             const periods = paretoComparison ? [{label:paretoComparison.primaryLabel,done:cDone,remaining:cRemaining},{label:comparePeriodLabel||paretoComparison.compareLabel,done:compareDone||0,remaining:compareRemaining||0}] : [{label:'Selected Period',done:cDone,remaining:cRemaining}];
@@ -3566,6 +3574,12 @@ window.addEventListener("cloudsync:status", (event) => {
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
             if (!calibCanvas || !projCanvas || !paretoCanvas || typeof Chart === 'undefined') return;
+
+            [calibCanvas, projCanvas, paretoCanvas].forEach(canvas => {
+                canvas.style.display = 'block';
+                const fallback = canvas.parentElement?.querySelector('.summary-fallback-chart');
+                if (fallback) fallback.remove();
+            });
 
             // 1) Calibration completion — no overdue categories.
             const ctxCalib = calibCanvas.getContext('2d');
