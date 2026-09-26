@@ -3072,6 +3072,16 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         // --- MODULE 0: SUMMARY ---
+        // Normalize plant names everywhere so Plant 1 / Plant 2 / PreMix filters
+        // work even when stored records use small naming variations.
+        const normalizePlant = value => {
+            const v = String(value || "").trim().toLowerCase();
+            if (v === "premix" || v === "premix plant" || v === "pre-mix") return "PreMix";
+            if (v === "plant 1") return "Plant 1";
+            if (v === "plant 2") return "Plant 2";
+            return String(value || "").trim();
+        };
+
         function renderSummaryModule() {
             const fType = document.getElementById("summary-filter-type").value;
             const yearVal = document.getElementById("summary-year-filter").value;
@@ -3079,20 +3089,20 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Filter equipment list based on plant and date filter (checking sched or calib date)
             const filteredEq = equipmentList.filter(eq => {
-                if (currentPlant !== "ALL" && eq.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
                 const matchesDate = checkDateMatchFilter(eq.extCalib || eq.extSched || eq.intCalib || eq.intSched, fType, yearVal, monthVal);
                 return matchesDate;
             });
 
             // Filter downtime logs
             const filteredDt = downtimeLogs.filter(dt => {
-                if (currentPlant !== "ALL" && dt.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
                 return checkDateMatchFilter(dt.start, fType, yearVal, monthVal);
             });
 
             // Filter projects
             const filteredPr = projectsList.filter(pr => {
-                if (currentPlant !== "ALL" && pr.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
                 return checkDateMatchFilter(pr.date, fType, yearVal, monthVal);
             });
 
@@ -3189,13 +3199,6 @@ window.addEventListener("cloudsync:status", (event) => {
             // The existing Summary plant filter still applies to the values, so selecting a plant
             // shows that plant's data while the other plant rows remain visible with zeroes.
             const summaryPlants = ["Plant 1", "Plant 2", "PreMix"];
-            const normalizePlant = value => {
-                const v = String(value || "").trim().toLowerCase();
-                if (v === "premix" || v === "premix plant" || v === "pre-mix") return "PreMix";
-                if (v === "plant 1") return "Plant 1";
-                if (v === "plant 2") return "Plant 2";
-                return String(value || "").trim();
-            };
 
             const calibByPlant = {};
             summaryPlants.forEach(p => calibByPlant[p] = { done: 0, scheduled: 0 });
@@ -3289,10 +3292,10 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Render summary charts. Project chart receives the same per-plant status counts
             // used by the Automation Projects "Project Distribution & Progress per Mill" chart.
-            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), projectByPlant, sortedLinePareto);
+            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), projectByPlant, sortedLinePareto, currentPlant);
         }
 
-        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto) {
+        function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant) {
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
@@ -3334,13 +3337,20 @@ window.addEventListener("cloudsync:status", (event) => {
             const ctxProj = projCanvas.getContext('2d');
             if (chartSummaryProjects) chartSummaryProjects.destroy();
 
-            const summaryPlants = ["Plant 1", "Plant 2", "PreMix"];
-            const getSeries = key => summaryPlants.map(p => Number(projectByPlant?.[p]?.[key] || 0));
+            const allSummaryPlants = ["Plant 1", "Plant 2", "PreMix"];
+            // Keep the supporting-detail rows fixed to all plants, but let the
+            // Executive Summary graph follow the plant selector. This makes the
+            // graph filterable without hiding the zero-data plant rows below it.
+            const chartPlants = selectedPlant && selectedPlant !== "ALL"
+                ? allSummaryPlants.filter(p => p === selectedPlant)
+                : allSummaryPlants;
+            const chartLabels = chartPlants.map(p => p === "PreMix" ? "PreMix Plant" : p);
+            const getSeries = key => chartPlants.map(p => Number(projectByPlant?.[p]?.[key] || 0));
 
             chartSummaryProjects = new Chart(ctxProj, {
                 type: 'bar',
                 data: {
-                    labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
+                    labels: chartLabels,
                     datasets: [
                         { label: 'In Progress', data: getSeries('inProgress'), backgroundColor: '#3b82f6', borderRadius: 4 },
                         { label: 'Planning', data: getSeries('planning'), backgroundColor: '#eab308', borderRadius: 4 },
@@ -3491,7 +3501,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const statusFilter = document.getElementById("calib-filter-status").value;
 
             const filtered = equipmentList.filter(eq => {
-                if (currentPlant !== "ALL" && eq.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
                 const status = getCalibStatus(eq);
                 if (statusFilter !== "ALL" && status !== statusFilter) return false;
 
@@ -3889,7 +3899,7 @@ window.addEventListener("cloudsync:status", (event) => {
             }
 
             const primaryLogs = downtimeLogs.filter(dt => {
-                if (currentPlant !== "ALL" && dt.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
                 if (search) {
                     const txt = `${dt.code} ${dt.equipment} ${dt.line} ${dt.category} ${dt.notes}`.toLowerCase();
                     if (!txt.includes(search)) return false;
@@ -3928,7 +3938,7 @@ window.addEventListener("cloudsync:status", (event) => {
             if (fType === "compare") {
                 compCard.classList.remove("hidden");
                 const compLogs = downtimeLogs.filter(dt => {
-                    if (currentPlant !== "ALL" && dt.plant !== currentPlant) return false;
+                    if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
                     return dt.start.startsWith(compareMonthVal);
                 });
                 let compHrs = 0;
@@ -4139,7 +4149,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
                 // Find equipment scheduled or calibrated on this date
                 const matchedEq = equipmentList.filter(eq => {
-                    if (currentPlant !== "ALL" && eq.plant !== currentPlant) return false;
+                    if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
                     return eq.extSched === dateStr || eq.extCalib === dateStr || eq.intSched === dateStr || eq.intCalib === dateStr;
                 });
 
@@ -4304,7 +4314,7 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("projects-chart-year-badge").innerText = `Year: ${yearFilter}`;
 
             const filtered = projectsList.filter(pr => {
-                if (currentPlant !== "ALL" && pr.plant !== currentPlant) return false;
+                if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
                 if (yearFilter !== "ALL" && !String(pr.date || "").startsWith(yearFilter)) return false;
                 return true;
             });
