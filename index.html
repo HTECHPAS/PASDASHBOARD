@@ -1108,7 +1108,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-2.5 rounded-xl space-y-2 overflow-hidden flex flex-col justify-between">
-                        <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                        <h4 id="summary-pareto-title" class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-bar text-amber-400"></i> Downtime Pareto by Line Category
                         </h4>
                         <div class="chart-box-container">
@@ -1138,11 +1138,14 @@ window.addEventListener("cloudsync:status", (event) => {
                 </div>
 
                 <div class="bg-slate-800/90 border border-slate-700/60 p-2.5 rounded-xl space-y-2 overflow-hidden">
-                    <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
-                        <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-clock-rotate-left text-amber-400"></i> System Reliability & Top Equipment by Line
-                        </h4>
-                        <span id="summary-dt-area-tag" class="text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">All Area Context</span>
+                    <div class="flex items-center justify-between border-b border-slate-700/60 pb-2 gap-2">
+                        <div class="min-w-0">
+                            <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-clock-rotate-left text-amber-400"></i> System Reliability & Top Equipment by Line
+                            </h4>
+                            <p id="summary-top-period-label" class="text-[9px] text-cyan-300 font-semibold mt-1">Selected period</p>
+                        </div>
+                        <span id="summary-dt-area-tag" class="text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded shrink-0">All Area Context</span>
                     </div>
 
                     <div class="grid grid-cols-1 lg:grid-cols-12 gap-2 items-start">
@@ -1174,9 +1177,11 @@ window.addEventListener("cloudsync:status", (event) => {
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                             <tr>
                                                 <th class="py-1.5 px-2">Line Category</th>
-                                                <th class="py-2.5 px-3">Equipment</th>
-                                                <th class="py-2.5 px-3">Failure Category</th>
+                                                <th id="summary-top-primary-equip-head" class="py-2.5 px-3">Equipment</th>
+                                                <th id="summary-top-primary-failure-head" class="py-2.5 px-3">Failure Category</th>
                                                 <th id="summary-top-primary-head" class="py-2.5 px-3 text-center">Total Time</th>
+                                                <th id="summary-top-compare-equip-head" class="py-2.5 px-3 hidden">Compare Equipment</th>
+                                                <th id="summary-top-compare-failure-head" class="py-2.5 px-3 hidden">Compare Failure</th>
                                                 <th id="summary-top-compare-head" class="py-2.5 px-3 text-center hidden">Comparison Time</th>
                                             </tr>
                                         </thead>
@@ -3315,16 +3320,26 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const topPrimaryHead = document.getElementById("summary-top-primary-head");
             const topCompareHead = document.getElementById("summary-top-compare-head");
+            const topPrimaryEquipHead = document.getElementById("summary-top-primary-equip-head");
+            const topPrimaryFailureHead = document.getElementById("summary-top-primary-failure-head");
+            const topCompareEquipHead = document.getElementById("summary-top-compare-equip-head");
+            const topCompareFailureHead = document.getElementById("summary-top-compare-failure-head");
+            const topPeriodLabel = document.getElementById("summary-top-period-label");
             if (topPrimaryHead) topPrimaryHead.textContent = isCompare ? `${primaryValue || 'Period 1'} Time` : 'Total Time';
+            if (topPrimaryEquipHead) topPrimaryEquipHead.textContent = isCompare ? `${primaryValue || 'Period 1'} Equipment` : 'Equipment';
+            if (topPrimaryFailureHead) topPrimaryFailureHead.textContent = isCompare ? `${primaryValue || 'Period 1'} Failure` : 'Failure Category';
             if (topCompareHead) {
                 topCompareHead.textContent = `${compareValue || 'Comparison'} Time`;
                 topCompareHead.classList.toggle('hidden', !isCompare);
             }
+            if (topCompareEquipHead) { topCompareEquipHead.textContent = `${compareValue || 'Comparison'} Equipment`; topCompareEquipHead.classList.toggle('hidden', !isCompare); }
+            if (topCompareFailureHead) { topCompareFailureHead.textContent = `${compareValue || 'Comparison'} Failure`; topCompareFailureHead.classList.toggle('hidden', !isCompare); }
+            if (topPeriodLabel) topPeriodLabel.textContent = isCompare ? `Top equipment is calculated independently for ${primaryValue || 'Period 1'} and ${compareValue || 'Period 2'} using the selected date filters.` : `Downtime records included: ${primaryValue || 'All Time'}${currentPlant !== 'ALL' ? ` • ${currentPlant}` : ''}`;
 
             const top5Body = document.getElementById("summary-top5-downtime-body");
             top5Body.innerHTML = "";
             if (allTopLines.length === 0) {
-                top5Body.innerHTML = `<tr><td colspan="${isCompare ? 5 : 4}" class="text-center py-4 text-slate-500 italic">No downtime records found for this period.</td></tr>`;
+                top5Body.innerHTML = `<tr><td colspan="${isCompare ? 7 : 4}" class="text-center py-4 text-slate-500 italic">No downtime records found for this period.</td></tr>`;
             } else {
                 allTopLines.forEach(line => {
                     const primary = primaryTopByLine[line];
@@ -3335,11 +3350,15 @@ window.addEventListener("cloudsync:status", (event) => {
                     const tr = document.createElement("tr");
                     tr.className = "hover:bg-slate-800/50 transition";
                     tr.innerHTML = `
-                        <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(line)}</td>
-                        <td class="py-2.5 px-3 text-slate-200">${escapeHtml(display.equipment)}</td>
-                        <td class="py-2.5 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(display.category)}</span></td>
+                        <td class="py-2.5 px-2 font-semibold text-white">${escapeHtml(line)}</td>
+                        <td class="py-2.5 px-3 text-slate-200">${escapeHtml(primary?.equipment || display?.equipment || '—')}</td>
+                        <td class="py-2.5 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(primary?.category || display?.category || '—')}</span></td>
                         <td class="py-2.5 px-3 text-center text-red-400 font-bold">${primary ? primary.duration.toFixed(1) + ' hrs' : '—'}</td>
-                        ${isCompare ? `<td class="py-2.5 px-3 text-center text-blue-400 font-bold">${compare ? compare.duration.toFixed(1) + ' hrs' : '—'}</td>` : ''}
+                        ${isCompare ? `
+                            <td class="py-2.5 px-3 text-slate-200">${escapeHtml(compare?.equipment || '—')}</td>
+                            <td class="py-2.5 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(compare?.category || '—')}</span></td>
+                            <td class="py-2.5 px-3 text-center text-blue-400 font-bold">${compare ? compare.duration.toFixed(1) + ' hrs' : '—'}</td>
+                        ` : ''}
                     `;
                     top5Body.appendChild(tr);
                 });
@@ -3511,8 +3530,33 @@ window.addEventListener("cloudsync:status", (event) => {
             return chartJsLoadPromise;
         }
 
+        function renderSummaryFallbackCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel) {
+            const makeBar = (label, value, max, cls) => {
+                const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+                return `<div class="flex items-center gap-2 text-[9px] mb-1.5"><span class="w-20 shrink-0 text-slate-300 truncate">${escapeHtml(label)}</span><div class="flex-1 h-3 bg-slate-900 rounded overflow-hidden"><div class="h-full ${cls}" style="width:${pct}%"></div></div><span class="w-12 text-right text-slate-300 font-bold">${Number(value || 0).toFixed(1)}</span></div>`;
+            };
+            const box = (canvasId, html) => {
+                const c = document.getElementById(canvasId); if (!c) return;
+                c.style.display = 'none';
+                let host = c.parentElement.querySelector('.summary-fallback-chart');
+                if (!host) { host = document.createElement('div'); host.className = 'summary-fallback-chart w-full h-full overflow-auto'; c.parentElement.appendChild(host); }
+                host.innerHTML = html;
+            };
+            const periods = paretoComparison ? [{label:paretoComparison.primaryLabel,done:cDone,remaining:cRemaining},{label:comparePeriodLabel||paretoComparison.compareLabel,done:compareDone||0,remaining:compareRemaining||0}] : [{label:'Selected Period',done:cDone,remaining:cRemaining}];
+            const calibMax = Math.max(1, ...periods.map(x=>x.done+x.remaining));
+            box('chart-summary-calib', periods.map(x=>`<div class="mb-3"><div class="text-[9px] text-slate-400 font-bold mb-1">${escapeHtml(x.label)}</div>${makeBar('DONE',x.done,calibMax,'bg-emerald-500')}${makeBar('REMAINING',x.remaining,calibMax,'bg-slate-600')}</div>`).join(''));
+            const plants = selectedPlant && selectedPlant !== 'ALL' ? ['Plant 1','Plant 2','PreMix'].filter(p=>normalizePlant(p)===normalizePlant(selectedPlant)) : ['Plant 1','Plant 2','PreMix'];
+            const keys=['In Progress','Planning','On Hold','Completed'];
+            const classes=['bg-blue-500','bg-yellow-500','bg-red-500','bg-emerald-500'];
+            const projectHtml = plants.map(p=>{ const a=projectByPlant?.[p]||{}; const b=compareProjectByPlant?.[p]||{}; const total=Math.max(1,...keys.map(k=>Number(a[k]||0)),...(paretoComparison?keys.map(k=>Number(b[k]||0)):[])); const row=(obj,label)=>`<div class="mb-2"><div class="text-[9px] text-slate-400 font-bold mb-1">${escapeHtml(label)}</div>${keys.map((k,i)=>makeBar(k,obj[k]||0,total,classes[i])).join('')}</div>`; return `<div class="border-b border-slate-700/40 pb-2 mb-2"><div class="text-[9px] text-white font-bold mb-1">${escapeHtml(p==='PreMix'?'PreMix Plant':p)}</div>${row(a,paretoComparison?paretoComparison.primaryLabel:'Status')}${paretoComparison?row(b,comparePeriodLabel||paretoComparison.compareLabel):''}</div>`; }).join('');
+            box('chart-summary-projects', projectHtml || '<div class="text-slate-500 text-xs">No project data.</div>');
+            const items = sortedLinePareto || []; const compareItems=paretoComparison?.compare||[]; const map={}; items.forEach(i=>map[i.line]={p:Number(i.duration||0),c:0}); compareItems.forEach(i=>{if(!map[i.line])map[i.line]={p:0,c:0};map[i.line].c=Number(i.duration||0)}); const rows=Object.entries(map).sort((a,b)=>(b[1].p+b[1].c)-(a[1].p+a[1].c)); const max=Math.max(1,...rows.map(x=>Math.max(x[1].p,x[1].c)));
+            box('chart-summary-pareto', rows.length ? rows.map(([line,v])=>`<div class="mb-2">${makeBar(line,v.p,max,'bg-amber-500')}${paretoComparison?makeBar((comparePeriodLabel||'Compare')+' • '+line,v.c,max,'bg-blue-500'):''}</div>`).join('') : '<div class="text-slate-500 text-xs text-center py-8">No downtime data for this period.</div>');
+        }
+
         function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel) {
             if (typeof Chart === 'undefined') {
+                renderSummaryFallbackCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel);
                 ensureChartJsLoaded().then(ok => {
                     if (ok && typeof renderSummaryModule === 'function') renderSummaryModule();
                 });
