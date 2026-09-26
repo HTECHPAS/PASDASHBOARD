@@ -3317,6 +3317,66 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             }
 
+            // System Reliability detail by plant. This section was present in the HTML
+            // but had no renderer, which caused the large blank area under the KPI cards.
+            const reliabilityReports = document.getElementById("summary-per-plant-reports");
+            if (reliabilityReports) {
+                const reportPeriods = [{
+                    label: primaryValue || "All Time",
+                    logs: filteredDt
+                }];
+                if (isCompare) reportPeriods.push({ label: compareValue || "Comparison", logs: comparisonDt });
+
+                const calcReliability = (logs) => {
+                    let hours = 0, valid = 0;
+                    logs.forEach(dt => {
+                        const st = new Date(dt.start), en = new Date(dt.end);
+                        const h = (en - st) / 3600000;
+                        if (Number.isFinite(h) && h > 0) { hours += h; valid++; }
+                    });
+                    return {
+                        hours,
+                        events: valid,
+                        mtbf: valid ? 720 / valid : 0,
+                        mttr: valid ? (hours / valid) * 60 : 0,
+                        availability: Math.max(0, Math.min(100, (1 - hours / 720) * 100))
+                    };
+                };
+
+                const reportPlants = currentPlant === "ALL" ? allSummaryPlants : summaryPlants;
+                reliabilityReports.innerHTML = reportPlants.map(plant => {
+                    const periodsHtml = reportPeriods.map(period => {
+                        const logs = period.logs.filter(dt => normalizePlant(dt.plant) === normalizePlant(plant));
+                        const r = calcReliability(logs);
+                        const lineMap = {};
+                        logs.forEach(dt => {
+                            const line = String(dt.line || "Unclassified Line").trim().replace(/\\s+/g, " ");
+                            const st = new Date(dt.start), en = new Date(dt.end);
+                            const h = Math.max(0, (en - st) / 3600000);
+                            lineMap[line] = (lineMap[line] || 0) + (Number.isFinite(h) ? h : 0);
+                        });
+                        const lines = Object.entries(lineMap).sort((a,b) => b[1] - a[1]).slice(0, 5);
+                        const lineHtml = lines.length ? lines.map(([line,h]) =>
+                            `<div class="flex items-center justify-between gap-2 text-[9px] border-t border-slate-700/30 pt-1 mt-1"><span class="text-slate-300 truncate">${escapeHtml(line)}</span><span class="font-bold text-amber-400 shrink-0">${h.toFixed(1)} hrs</span></div>`
+                        ).join("") : `<div class="text-[9px] text-slate-500 italic mt-1">No downtime records</div>`;
+                        return `<div class="bg-slate-900/50 border border-slate-700/40 rounded-lg p-2 flex-1 min-w-0">
+                            <div class="text-[9px] uppercase tracking-wider font-bold text-cyan-300 mb-1">${escapeHtml(period.label)}</div>
+                            <div class="grid grid-cols-4 gap-1 text-center">
+                                <div><div class="text-[8px] text-slate-500 uppercase">Events</div><strong class="text-[11px] text-white">${r.events}</strong></div>
+                                <div><div class="text-[8px] text-slate-500 uppercase">Downtime</div><strong class="text-[11px] text-red-400">${r.hours.toFixed(1)}h</strong></div>
+                                <div><div class="text-[8px] text-slate-500 uppercase">MTBF</div><strong class="text-[11px] text-blue-400">${r.mtbf.toFixed(1)}h</strong></div>
+                                <div><div class="text-[8px] text-slate-500 uppercase">MTTR</div><strong class="text-[11px] text-amber-400">${Math.round(r.mttr)}m</strong></div>
+                            </div>
+                            ${lineHtml}
+                        </div>`;
+                    }).join("");
+                    return `<div class="border border-slate-700/40 rounded-xl p-2 bg-slate-800/40">
+                        <div class="flex items-center justify-between gap-2 mb-1.5"><span class="text-[10px] font-bold text-white">${escapeHtml(plant === "PreMix" ? "PreMix Plant" : plant)}</span><span class="text-[8px] text-slate-500 uppercase">Reliability Detail</span></div>
+                        <div class="flex flex-col sm:flex-row gap-2">${periodsHtml}</div>
+                    </div>`;
+                }).join("") || `<div class="text-xs text-slate-500 italic">No plant reliability data available.</div>`;
+            }
+
             // Top Equipment = ONE row per Line Category. Aggregate by Equipment + Failure Category and keep only the highest total downtime for each line.
             const lineEquipmentMap = {};
             filteredDt.forEach(dt => {
