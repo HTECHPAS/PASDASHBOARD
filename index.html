@@ -1620,14 +1620,10 @@ window.addEventListener("cloudsync:status", (event) => {
                                 <option value="ALL" class="bg-slate-800">All Dates</option>
                                 <option value="YEAR" class="bg-slate-800">By Year</option>
                                 <option value="MONTH" class="bg-slate-800">By Month</option>
-                                <option value="QUARTER" class="bg-slate-800">By Quarter</option>
-                                <option value="DATE" class="bg-slate-800">Exact Date</option>
                                 <option value="RANGE" class="bg-slate-800">Custom Date Range</option>
                             </select>
                             <select id="projects-year-filter" onchange="renderProjectsModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden"></select>
                             <input type="month" id="projects-month-filter" onchange="renderProjectsModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden">
-                            <select id="projects-quarter-filter" onchange="renderProjectsModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden"><option value="">Select Quarter</option><option value="1">Q1</option><option value="2">Q2</option><option value="3">Q3</option><option value="4">Q4</option></select>
-                            <input type="date" id="projects-date-exact" onchange="renderProjectsModule()" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 hidden">
                             <input type="date" id="projects-date-from" onchange="renderProjectsModule()" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 hidden">
                             <span id="projects-date-to-label" class="text-slate-500 hidden">to</span>
                             <input type="date" id="projects-date-to" onchange="renderProjectsModule()" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 hidden">
@@ -1988,14 +1984,16 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                     <div>
                         <label class="block text-slate-300 font-semibold mb-1">Progress %</label>
-                        <input type="number" id="proj-progress" min="0" max="100" required placeholder="0-100" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white outline-none">
+                        <input type="number" id="proj-progress" min="0" max="100" readonly placeholder="Auto" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white outline-none opacity-80">
                     </div>
                     <div>
                         <label class="block text-slate-300 font-semibold mb-1">Status</label>
                         <select id="proj-status" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white outline-none">
                             <option value="In Progress">In Progress</option>
                             <option value="Pending">Pending</option>
-                            <option value="Completed">Completed</option>
+                            <option value="Planning">Planning</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Completed">Completed (Automatic)</option>
                         </select>
                     </div>
                 </div>
@@ -2004,7 +2002,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     <label class="block text-slate-300 font-semibold mb-1">Project Timeline Milestones</label>
                     <div id="project-milestones-editor" class="space-y-2"></div>
                     <button type="button" onclick="addProjectMilestoneRow()" class="mt-2 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-semibold"><i class="fa-solid fa-plus mr-1"></i> Add Timeline Step</button>
-                    <p class="text-[9px] text-slate-500 mt-1">Timeline progress is computed from completed milestone duration versus total planned duration.</p>
+                    <p class="text-[9px] text-slate-500 mt-1">Progress is automatic: each completed timeline step contributes to the project %. When all timeline steps are Completed, the project becomes Completed automatically. On Hold remains a manual override.</p>
                 </div>
 
                 <div>
@@ -3364,7 +3362,7 @@ window.addEventListener("cloudsync:status", (event) => {
             filteredPr.forEach(pr => {
                 const plant = normalizePlant(pr.plant);
                 if (!projectByPlant[plant]) return;
-                const status = getProjectEffectiveStatus(pr);
+                const status = String(pr.status || "Planning").trim();
                 if (Object.prototype.hasOwnProperty.call(projectByPlant[plant], status)) projectByPlant[plant][status]++;
             });
 
@@ -3388,10 +3386,10 @@ window.addEventListener("cloudsync:status", (event) => {
                 <div class="grid grid-cols-4 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span class="text-center">Done</span><span class="text-center">Scheduled Instruments</span><span class="text-center">Percent</span></div>
                 ${summaryPlants.map(p => { const d=calibByPlant[p]?.done||0; const sch=calibByPlant[p]?.scheduled||0; const pct=sch?((d/sch)*100).toFixed(0):'0'; return `<div class="grid grid-cols-4 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0"><span class="font-semibold text-white">${escapeHtml(p)}</span><strong class="text-center text-emerald-400">${d}</strong><span class="text-center text-slate-300">${sch}</span><span class="text-center text-blue-300">${pct}%</span></div>`; }).join('')}`;
 
-            const pInProgress = filteredPr.filter(pr => getProjectEffectiveStatus(pr) === "In Progress").length;
-            const pPlanning = filteredPr.filter(pr => getProjectEffectiveStatus(pr) === "Pending").length;
-            const pOnHold = 0;
-            const pCompleted = filteredPr.filter(pr => getProjectEffectiveStatus(pr) === "Completed").length;
+            const pInProgress = filteredPr.filter(pr => String(pr.status || "").trim() === "In Progress").length;
+            const pPlanning = filteredPr.filter(pr => String(pr.status || "").trim() === "Planning").length;
+            const pOnHold = filteredPr.filter(pr => String(pr.status || "").trim() === "On Hold").length;
+            const pCompleted = filteredPr.filter(pr => String(pr.status || "").trim() === "Completed").length;
 
             const projSupp = document.getElementById("summary-per-plant-projects");
             const projectViewAction = isPageAllowed("projects")
@@ -3399,7 +3397,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
             const compareProjectByPlant = {};
             allSummaryPlants.forEach(p => compareProjectByPlant[p] = {"In Progress":0, Planning:0, "On Hold":0, Completed:0});
-            comparisonPr.forEach(pr => { const plant=normalizePlant(pr.plant); if(!compareProjectByPlant[plant]) return; const st=getProjectEffectiveStatus(pr); if(st==='Pending') compareProjectByPlant[plant].Planning++; else if(Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant],st)) compareProjectByPlant[plant][st]++; });
+            comparisonPr.forEach(pr => { const plant=normalizePlant(pr.plant); if(!compareProjectByPlant[plant]) return; const st=String(pr.status||'Planning').trim(); if(Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant],st)) compareProjectByPlant[plant][st]++; });
             projSupp.innerHTML = isCompare ? `
                 <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryValue || 'Date 1')} vs ${escapeHtml(compareValue || 'Date 2')}</div>
                 <div class="grid grid-cols-6 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span>Period</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>
@@ -4180,43 +4178,53 @@ window.addEventListener("cloudsync:status", (event) => {
             return pr.timeline;
         }
 
-        function normalizeProjectStatus(status) {
-            const s = String(status || '').trim().toLowerCase();
-            if (s === 'completed') return 'Completed';
-            if (s === 'in progress') return 'In Progress';
-            if (s === 'pending' || s === 'planning' || s === 'on hold') return 'Pending';
-            return 'Pending';
-        }
-
-        function getProjectEffectiveStatus(pr) {
-            const timeline = ensureProjectTimeline(pr).filter(m => m && m.name && m.start && m.end);
-            if (!timeline.length) return normalizeProjectStatus(pr.status);
-            const completed = timeline.filter(m => String(m.status || '').trim().toLowerCase() === 'completed').length;
-            if (completed === timeline.length) return 'Completed';
-            return normalizeProjectStatus(pr.status);
-        }
-
         function getTimelineMetrics(pr) {
-            const timeline = ensureProjectTimeline(pr).filter(m => m && m.start && m.end);
-            if (!timeline.length) return { plannedDays: 0, elapsedDays: 0, timelineProgress: null, varianceDays: null, completed: 0, total: 0, scheduleProgress: null, effectiveStatus: normalizeProjectStatus(pr.status) };
+            const timeline = ensureProjectTimeline(pr).filter(m => m && (m.name || m.start || m.end));
+            if (!timeline.length) return { plannedDays: 0, elapsedDays: 0, timelineProgress: null, varianceDays: null, completed: 0, total: 0, scheduleProgress: null };
+            let plannedMs = 0, elapsedMs = 0, completed = 0, validDurationSteps = 0;
             const now = new Date(); now.setHours(0,0,0,0);
-            let plannedMs = 0, elapsedMs = 0, completed = 0;
             timeline.forEach(m => {
+                const status = String(m.status || 'Pending').trim().toLowerCase();
+                if (status === 'completed') completed++;
+                if (!m.start || !m.end) return;
                 const start = new Date(m.start + 'T00:00:00');
                 const end = new Date(m.end + 'T00:00:00');
                 if (isNaN(start) || isNaN(end) || end < start) return;
                 const duration = Math.max(1, Math.round((end - start) / 86400000) + 1);
+                validDurationSteps++;
                 plannedMs += duration * 86400000;
                 const elapsedEnd = Math.min(Math.max(now, start), new Date(end.getTime() + 86400000));
                 if (elapsedEnd > start) elapsedMs += elapsedEnd - start;
-                if (String(m.status || '').trim().toLowerCase() === 'completed') completed++;
             });
             const plannedDays = plannedMs / 86400000;
             const elapsedDays = elapsedMs / 86400000;
-            const timelineProgress = timeline.length ? Math.round((completed / timeline.length) * 100) : 0;
-            const scheduleProgress = timelineProgress;
-            const varianceDays = Math.round(scheduleProgress - (plannedDays > 0 ? Math.min(100, (elapsedDays / plannedDays) * 100) : 0));
-            return { plannedDays, elapsedDays, timelineProgress, varianceDays, completed, total: timeline.length, scheduleProgress, effectiveStatus: getProjectEffectiveStatus(pr) };
+            // Project progress is driven by milestone completion, not elapsed calendar time.
+            // Every completed timeline step contributes equally to the project completion %.
+            const scheduleProgress = timeline.length ? Math.round((completed / timeline.length) * 100) : 0;
+            const timelineProgress = scheduleProgress;
+            const varianceDays = null;
+            return { plannedDays, elapsedDays, timelineProgress, varianceDays, completed, total: timeline.length, scheduleProgress, validDurationSteps };
+        }
+
+        function getAutomaticProjectStatus(pr) {
+            const tm = getTimelineMetrics(pr);
+            const selected = String(pr.status || 'In Progress').trim();
+            // On Hold is an explicit user override and is retained even when milestones are complete.
+            if (selected === 'On Hold') return 'On Hold';
+            // Completion is automatic only when every timeline step is marked Completed.
+            if (tm.total > 0 && tm.completed === tm.total) return 'Completed';
+            // Do not allow a manually selected Completed state while unfinished steps remain.
+            if (selected === 'Completed') return 'In Progress';
+            return selected === 'Pending' || selected === 'Planning' ? selected : 'In Progress';
+        }
+
+        function syncProjectTimelineProgress(pr) {
+            const tm = getTimelineMetrics(pr);
+            if (tm.total > 0) {
+                pr.progress = tm.scheduleProgress;
+                pr.status = getAutomaticProjectStatus(pr);
+            }
+            return tm;
         }
 
         function timelineStatusClass(status) {
@@ -4288,16 +4296,12 @@ window.addEventListener("cloudsync:status", (event) => {
             const type = document.getElementById('projects-date-filter-type')?.value || 'ALL';
             const year = document.getElementById('projects-year-filter');
             const month = document.getElementById('projects-month-filter');
-            const quarter = document.getElementById('projects-quarter-filter');
-            const exact = document.getElementById('projects-date-exact');
             const from = document.getElementById('projects-date-from');
             const to = document.getElementById('projects-date-to');
             const toLabel = document.getElementById('projects-date-to-label');
-            [year, month, quarter, exact, from, to, toLabel].forEach(el => el?.classList.add('hidden'));
+            [year, month, from, to, toLabel].forEach(el => el?.classList.add('hidden'));
             if (type === 'YEAR') year?.classList.remove('hidden');
             if (type === 'MONTH') month?.classList.remove('hidden');
-            if (type === 'QUARTER') { year?.classList.remove('hidden'); quarter?.classList.remove('hidden'); }
-            if (type === 'DATE') exact?.classList.remove('hidden');
             if (type === 'RANGE') { from?.classList.remove('hidden'); to?.classList.remove('hidden'); toLabel?.classList.remove('hidden'); }
             renderProjectsModule();
         }
@@ -4307,12 +4311,9 @@ window.addEventListener("cloudsync:status", (event) => {
             const type = document.getElementById("projects-date-filter-type")?.value || 'ALL';
             const yearFilter = document.getElementById("projects-year-filter")?.value || 'ALL';
             const monthFilter = document.getElementById("projects-month-filter")?.value || '';
-            const quarterFilter = document.getElementById("projects-quarter-filter")?.value || '';
-            const exactFilter = document.getElementById("projects-date-exact")?.value || '';
             const fromFilter = document.getElementById("projects-date-from")?.value || '';
             const toFilter = document.getElementById("projects-date-to")?.value || '';
-            const quarterName = quarterFilter ? `Q${quarterFilter}` : '—';
-            const dateText = type === 'YEAR' ? `Year: ${yearFilter}` : type === 'MONTH' ? `Month: ${monthFilter || '—'}` : type === 'QUARTER' ? `Quarter: ${yearFilter} ${quarterName}` : type === 'DATE' ? `Date: ${exactFilter || '—'}` : type === 'RANGE' ? `Range: ${fromFilter || '—'} to ${toFilter || '—'}` : 'All Dates';
+            const dateText = type === 'YEAR' ? `Year: ${yearFilter}` : type === 'MONTH' ? `Month: ${monthFilter || '—'}` : type === 'RANGE' ? `Range: ${fromFilter || '—'} to ${toFilter || '—'}` : 'All Dates';
             document.getElementById("projects-chart-year-badge").innerText = dateText;
 
             const filtered = projectsList.filter(pr => {
@@ -4320,12 +4321,6 @@ window.addEventListener("cloudsync:status", (event) => {
                 const d = String(pr.date || '').slice(0,10);
                 if (type === 'YEAR' && yearFilter !== 'ALL' && !d.startsWith(yearFilter)) return false;
                 if (type === 'MONTH' && monthFilter && !d.startsWith(monthFilter)) return false;
-                if (type === 'QUARTER' && yearFilter !== 'ALL') {
-                    const m = parseInt(d.slice(5,7), 10);
-                    const q = quarterFilter ? Math.floor((m - 1) / 3) + 1 : 0;
-                    if (!d.startsWith(yearFilter) || (quarterFilter && q !== Number(quarterFilter))) return false;
-                }
-                if (type === 'DATE' && exactFilter && d !== exactFilter) return false;
                 if (type === 'RANGE') {
                     if (fromFilter && d < fromFilter) return false;
                     if (toFilter && d > toFilter) return false;
@@ -4342,13 +4337,11 @@ window.addEventListener("cloudsync:status", (event) => {
                 filtered.forEach(pr => {
                     const statusColors = {
                         "In Progress": "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                        "Pending": "bg-amber-500/10 text-amber-400 border-amber-500/20",
                         "Planning": "bg-amber-500/10 text-amber-400 border-amber-500/20",
                         "On Hold": "bg-red-500/10 text-red-400 border-red-500/20",
                         "Completed": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                     };
-                    const tm = getTimelineMetrics(pr);
-                    const effectiveStatus = tm.effectiveStatus || getProjectEffectiveStatus(pr);
+                    const tm = syncProjectTimelineProgress(pr);
                     const computed = tm.timelineProgress == null ? Number(pr.progress || 0) : tm.timelineProgress;
                     const card = document.createElement("div");
                     card.className = "bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between space-y-4 shadow-lg";
@@ -4356,7 +4349,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="space-y-2">
                             <div class="flex items-start justify-between gap-2">
                                 <h4 class="text-xs font-bold text-white uppercase tracking-wider">${escapeHtml(pr.title)}</h4>
-                                <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${statusColors[effectiveStatus] || statusColors['Pending'] || ''} whitespace-nowrap">${escapeHtml(effectiveStatus)}</span>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${statusColors[pr.status] || ''} whitespace-nowrap">${escapeHtml(pr.status || 'Planning')}</span>
                             </div>
                             <div class="flex items-center gap-3 text-[11px] text-slate-400"><span><i class="fa-solid fa-building text-blue-400 mr-1"></i>${escapeHtml(pr.plant)}</span><span><i class="fa-solid fa-user-gear text-purple-400 mr-1"></i>${escapeHtml(pr.lead)}</span></div>
                         </div>
@@ -4394,13 +4387,14 @@ window.addEventListener("cloudsync:status", (event) => {
             const plants = ["Plant 1", "Plant 2", "PreMix"];
             const statusCounts = {
                 "In Progress": plants.map(() => 0),
-                "Pending": plants.map(() => 0),
+                "Planning": plants.map(() => 0),
+                "On Hold": plants.map(() => 0),
                 "Completed": plants.map(() => 0)
             };
             filtered.forEach(pr => {
                 const pi = plants.indexOf(normalizePlant(pr.plant));
                 if (pi < 0) return;
-                const status = getProjectEffectiveStatus(pr);
+                const status = String(pr.status || "Planning").trim();
                 if (!statusCounts[status]) statusCounts[status] = plants.map(() => 0);
                 statusCounts[status][pi] += 1;
             });
@@ -4415,7 +4409,8 @@ window.addEventListener("cloudsync:status", (event) => {
                         labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
                         datasets: [
                             { label: 'In Progress', data: statusCounts['In Progress'], backgroundColor: '#3b82f6', borderRadius: 4 },
-                            { label: 'Pending', data: statusCounts['Pending'], backgroundColor: '#eab308', borderRadius: 4 },
+                            { label: 'Planning', data: statusCounts['Planning'], backgroundColor: '#eab308', borderRadius: 4 },
+                            { label: 'On Hold', data: statusCounts['On Hold'], backgroundColor: '#ef4444', borderRadius: 4 },
                             { label: 'Completed', data: statusCounts['Completed'], backgroundColor: '#22c55e', borderRadius: 4 }
                         ]
                     },
@@ -4471,6 +4466,24 @@ window.addEventListener("cloudsync:status", (event) => {
             })).filter(m => m.name || m.start || m.end);
         }
 
+        function updateProjectFormProgressFromTimeline() {
+            const timeline = readProjectMilestonesFromForm();
+            const total = timeline.length;
+            const completed = timeline.filter(m => String(m.status || '').toLowerCase() === 'completed').length;
+            const pct = total ? Math.round((completed / total) * 100) : 0;
+            const progressEl = document.getElementById('proj-progress');
+            if (progressEl) progressEl.value = pct;
+            const statusEl = document.getElementById('proj-status');
+            if (statusEl && total > 0 && completed === total) statusEl.value = 'Completed';
+            else if (statusEl && statusEl.value === 'Completed') statusEl.value = 'In Progress';
+        }
+
+        document.addEventListener('change', function(e) {
+            if (e.target && e.target.classList && e.target.classList.contains('milestone-status')) {
+                updateProjectFormProgressFromTimeline();
+            }
+        });
+
         function handleProjectSubmit(e) {
             if (!isAdminUser()) return;
             e.preventDefault();
@@ -4479,8 +4492,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const plant = document.getElementById("proj-plant").value;
             const lead = document.getElementById("proj-lead").value;
             const date = document.getElementById("proj-date").value;
-            const progress = parseInt(document.getElementById("proj-progress").value);
-            const status = normalizeProjectStatus(document.getElementById("proj-status").value);
+            const selectedStatus = document.getElementById("proj-status").value;
             const notes = document.getElementById("proj-notes").value;
             const timeline = readProjectMilestonesFromForm();
 
@@ -4488,10 +4500,13 @@ window.addEventListener("cloudsync:status", (event) => {
                 const pr = projectsList.find(item => item.id == id);
                 if (pr) {
                     pr.title = title; pr.plant = plant; pr.lead = lead; pr.date = date;
-                    pr.progress = progress; pr.status = status; pr.notes = notes; pr.timeline = timeline;
+                    pr.status = selectedStatus; pr.notes = notes; pr.timeline = timeline;
+                    syncProjectTimelineProgress(pr);
                 }
             } else {
-                projectsList.push({ id: Date.now(), title, plant, lead, date, progress, status, notes, timeline });
+                const pr = { id: Date.now(), title, plant, lead, date, progress: 0, status: selectedStatus, notes, timeline };
+                syncProjectTimelineProgress(pr);
+                projectsList.push(pr);
             }
 
             saveStorage();
@@ -4512,8 +4527,9 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("proj-plant").value = pr.plant;
             document.getElementById("proj-lead").value = pr.lead;
             document.getElementById("proj-date").value = pr.date;
-            document.getElementById("proj-progress").value = pr.progress;
-            document.getElementById("proj-status").value = normalizeProjectStatus(pr.status);
+            syncProjectTimelineProgress(pr);
+            document.getElementById("proj-progress").value = pr.progress ?? 0;
+            document.getElementById("proj-status").value = pr.status || 'In Progress';
             document.getElementById("proj-notes").value = pr.notes || "";
             const editor = document.getElementById("project-milestones-editor");
             editor.innerHTML = "";
@@ -4588,7 +4604,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 wsData = [["Plant", "Project Title", "Lead Engineer", "Target Date", "Progress %", "Status", "Milestones"]];
                 projectsList.forEach(pr => {
                     if (currentPlant === "ALL" || pr.plant === currentPlant) {
-                        wsData.push([pr.plant, pr.title, pr.lead, pr.date, `${getTimelineMetrics(pr).timelineProgress == null ? Number(pr.progress || 0) : getTimelineMetrics(pr).timelineProgress}%`, getProjectEffectiveStatus(pr), pr.notes]);
+                        wsData.push([pr.plant, pr.title, pr.lead, pr.date, `${pr.progress}%`, pr.status, pr.notes]);
                     }
                 });
             }
@@ -4619,7 +4635,7 @@ window.addEventListener("cloudsync:status", (event) => {
             // Sheet 3: Projects
             const wsProjData = [["Plant", "Project Title", "Lead Engineer", "Target Date", "Progress %", "Status", "Milestones"]];
             projectsList.forEach(pr => {
-                wsProjData.push([pr.plant, pr.title, pr.lead, pr.date, `${getTimelineMetrics(pr).timelineProgress == null ? Number(pr.progress || 0) : getTimelineMetrics(pr).timelineProgress}%`, getProjectEffectiveStatus(pr), pr.notes]);
+                wsProjData.push([pr.plant, pr.title, pr.lead, pr.date, `${pr.progress}%`, pr.status, pr.notes]);
             });
             XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsProjData), "Automation Projects");
 
