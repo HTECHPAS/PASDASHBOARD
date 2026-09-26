@@ -1116,7 +1116,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="chart-box-container">
                             <canvas id="chart-summary-pareto"></canvas>
                         </div>
-                        <p class="text-[9px] text-slate-500 text-center">Top 3 equipment by downtime with cumulative %</p>
+                        <p class="text-[9px] text-slate-500 text-center">Top 3 equipment + Other contributors with cumulative % of total downtime</p>
                     </div>
                 </div>
 
@@ -3360,7 +3360,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     return out;
                 };
                 const rel1=calcReliability(filteredDt), rel2=isCompare?calcReliability(comparisonDt):{};
-                reliabilitySupp.innerHTML = `<div class="overflow-x-auto rounded-xl border border-slate-700/50"><table class="w-full text-left text-[10px] text-slate-300"><thead class="bg-slate-900/80 text-slate-500 uppercase"><tr>${isCompare?`<th class="px-2 py-1.5">Plant</th><th class="px-2 py-1.5 text-center">${escapeHtml(primaryValue)} DT</th><th class="px-2 py-1.5 text-center">${escapeHtml(primaryValue)} Uptime</th><th class="px-2 py-1.5 text-center">${escapeHtml(compareValue)} DT</th><th class="px-2 py-1.5 text-center">${escapeHtml(compareValue)} Uptime</th>`:`<th class="px-2 py-1.5">Plant</th><th class="px-2 py-1.5 text-center">Downtime</th><th class="px-2 py-1.5 text-center">Uptime</th><th class="px-2 py-1.5 text-center">MTBF</th><th class="px-2 py-1.5 text-center">MTTR</th>`}</tr></thead><tbody>${reliabilityPlants.map(p=>{const a=rel1[p]||{},b=rel2[p]||{};return `<tr class="border-t border-slate-700/30"><td class="px-2 py-1.5 font-semibold text-white">${escapeHtml(p)}</td>${isCompare?`<td class="px-2 py-1.5 text-center text-red-400 font-semibold">${a.hours.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-cyan-300">${a.uptime.toFixed(1)}%</td><td class="px-2 py-1.5 text-center text-blue-400 font-semibold">${b.hours.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-cyan-300">${b.uptime.toFixed(1)}%</td>`:`<td class="px-2 py-1.5 text-center text-red-400 font-semibold">${a.hours.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-cyan-300">${a.uptime.toFixed(1)}%</td><td class="px-2 py-1.5 text-center text-blue-300">${a.mtbf.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-amber-300">${Math.round(a.mttr)} mins</td>`}</tr>`;}).join('')}</tbody></table></div>`;
+                reliabilitySupp.innerHTML = `<div class="overflow-x-auto rounded-xl border border-slate-700/50"><table class="w-full text-left text-xs text-slate-300"><thead class="bg-slate-900/80 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60"><tr>${isCompare?`<th class="px-2 py-1.5">Plant</th><th class="px-2 py-1.5 text-center">${escapeHtml(primaryValue)} DT</th><th class="px-2 py-1.5 text-center">${escapeHtml(primaryValue)} Uptime</th><th class="px-2 py-1.5 text-center">${escapeHtml(compareValue)} DT</th><th class="px-2 py-1.5 text-center">${escapeHtml(compareValue)} Uptime</th>`:`<th class="px-2 py-1.5">Plant</th><th class="px-2 py-1.5 text-center">Downtime</th><th class="px-2 py-1.5 text-center">Uptime</th><th class="px-2 py-1.5 text-center">MTBF</th><th class="px-2 py-1.5 text-center">MTTR</th>`}</tr></thead><tbody>${reliabilityPlants.map(p=>{const a=rel1[p]||{},b=rel2[p]||{};return `<tr class="border-t border-slate-700/30"><td class="px-2 py-1.5 font-semibold text-white">${escapeHtml(p)}</td>${isCompare?`<td class="px-2 py-1.5 text-center text-red-400 font-semibold">${a.hours.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-cyan-300">${a.uptime.toFixed(1)}%</td><td class="px-2 py-1.5 text-center text-blue-400 font-semibold">${b.hours.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-cyan-300">${b.uptime.toFixed(1)}%</td>`:`<td class="px-2 py-1.5 text-center text-red-400 font-semibold">${a.hours.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-cyan-300">${a.uptime.toFixed(1)}%</td><td class="px-2 py-1.5 text-center text-blue-300">${a.mtbf.toFixed(1)} hrs</td><td class="px-2 py-1.5 text-center text-amber-300">${Math.round(a.mttr)} mins</td>`}</tr>`;}).join('')}</tbody></table></div>`;
             }
 
             // Pareto = total downtime by Line Category. Repeated records for the same line are added together.
@@ -3756,11 +3756,11 @@ window.addEventListener("cloudsync:status", (event) => {
                 for(let i=0;i<=4;i++){const y=top+ph-(ph*i/4);svg+=`<line x1="${left}" y1="${y}" x2="${w-right}" y2="${y}" stroke="#334155" opacity=".45"/><text x="${left-4}" y="${y+3}" text-anchor="end" font-size="8" fill="#94a3b8">${Math.round(ymax*i/4)}</text>`;}
                 labels.forEach((lab,i)=>{const pi=Math.floor(i/(has?2:1)),cmp=has&&i%2===1,x=left+i*groupW+(groupW-barW)/2;let y=top+ph;sts.forEach(st=>{const v=Number((cmp?compareProjectByPlant:projectByPlant)?.[plants[pi]]?.[st.key]||0),bh=v/ymax*ph;y-=bh;svg+=`<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="2" fill="${st.color}"/>`;});const short=lab.length>17?lab.slice(0,17)+'…':lab;svg+=`<text x="${x+barW/2}" y="${h-27}" text-anchor="middle" font-size="7" fill="#94a3b8">${summarySvgEscape(short)}</text>`;});
                 let lx=left,ly=h-7;sts.forEach(st=>{svg+=`<rect x="${lx}" y="${ly-7}" width="7" height="7" fill="${st.color}"/><text x="${lx+10}" y="${ly}" font-size="7" fill="#94a3b8">${st.key}</text>`;lx+=55;}); setHost('chart-summary-projects',svg+'</svg>');
-                const buildTop3=logs=>{const m={};(logs||[]).forEach(dt=>{const e=String(dt.equipment||'Unclassified Equipment').trim().replace(/\s+/g,' '),d=Math.max(0,(new Date(dt.end)-new Date(dt.start))/(1000*60*60));m[e]=(m[e]||0)+d;});return Object.entries(m).map(([equipment,duration])=>({equipment,duration})).sort((a,b)=>b.duration-a.duration).slice(0,3);};
-                const a=buildTop3(primaryDowntimeLogs||[]),b=has?buildTop3(compareDowntimeLogs||[]):[],labels3=[...new Set([...a.map(x=>x.equipment),...b.map(x=>x.equipment)])],am=Object.fromEntries(a.map(x=>[x.equipment,x.duration])),bm=Object.fromEntries(b.map(x=>[x.equipment,x.duration])),at=a.reduce((z,x)=>z+x.duration,0),bt=b.reduce((z,x)=>z+x.duration,0);let acc=0,ac={};a.forEach(x=>{acc+=x.duration;ac[x.equipment]=at?acc/at*100:0;});acc=0;let bc={};b.forEach(x=>{acc+=x.duration;bc[x.equipment]=bt?acc/bt*100:0;});
+                const buildTop3PlusOther=logs=>{const m={};(logs||[]).forEach(dt=>{const e=String(dt.equipment||'Unclassified Equipment').trim().replace(/\s+/g,' '),d=Math.max(0,(new Date(dt.end)-new Date(dt.start))/(1000*60*60));m[e]=(m[e]||0)+d;});const all=Object.entries(m).map(([equipment,duration])=>({equipment,duration})).sort((a,b)=>b.duration-a.duration);const total=all.reduce((z,x)=>z+x.duration,0),top=all.slice(0,3),other=Math.max(0,total-top.reduce((z,x)=>z+x.duration,0)),items=[...top,{equipment:'Other',duration:other}];let acc=0;items.forEach(x=>{acc+=x.duration;x.cumulativePercent=total?acc/total*100:0;});return {items,total};};
+                const fallbackPrimaryTotal=Array.isArray(sortedLinePareto)?sortedLinePareto.reduce((z,x)=>z+Number(x.duration||0),0):0;const fallbackCompareTotal=has&&Array.isArray(paretoComparison?.compare)?paretoComparison.compare.reduce((z,x)=>z+Number(x.duration||0),0):0;const aP=buildTop3PlusOther(primaryDowntimeLogs||[]);const bP=has?buildTop3PlusOther(compareDowntimeLogs||[]):{items:[],total:0};if(fallbackPrimaryTotal>0){aP.total=fallbackPrimaryTotal;let run=0;aP.items.forEach(x=>{run+=x.duration;x.cumulativePercent=run/fallbackPrimaryTotal*100;});if(aP.items.length)aP.items[aP.items.length-1].cumulativePercent=100;}if(fallbackCompareTotal>0){bP.total=fallbackCompareTotal;let run=0;bP.items.forEach(x=>{run+=x.duration;x.cumulativePercent=run/fallbackCompareTotal*100;});if(bP.items.length)bP.items[bP.items.length-1].cumulativePercent=100;}const a=aP.items,b=bP.items,labels3=[...new Set([...a.filter(x=>x.equipment!=='Other').map(x=>x.equipment),...b.filter(x=>x.equipment!=='Other').map(x=>x.equipment),'Other'])],am=Object.fromEntries(a.map(x=>[x.equipment,x.duration])),bm=Object.fromEntries(b.map(x=>[x.equipment,x.duration])),ac=Object.fromEntries(a.map(x=>[x.equipment,x.cumulativePercent])),bc=Object.fromEntries(b.map(x=>[x.equipment,x.cumulativePercent]));
                 const pw2=470,ph2=120,l2=42,r2=40,t2=12,b2=42,g=labels3.length?((pw2-l2-r2)/labels3.length):1,bw=Math.min(34,g*.28), maxv=Math.max(1,...labels3.map(x=>Math.max(am[x]||0,bm[x]||0))), pts1=[],pts2=[];let sv=`<svg viewBox="0 0 ${pw2} 190" width="100%" height="100%">`;
                 for(let i=0;i<=4;i++){const y=t2+ph2-(ph2*i/4);sv+=`<line x1="${l2}" y1="${y}" x2="${pw2-r2}" y2="${y}" stroke="#334155" opacity=".45"/><text x="${l2-4}" y="${y+3}" text-anchor="end" font-size="7" fill="#94a3b8">${(maxv*i/4).toFixed(1)}</text>`;}
-                labels3.forEach((lab,i)=>{const cx=l2+i*g+g/2,v1=am[lab]||0,v2=bm[lab]||0,y1=t2+ph2-v1/maxv*ph2,y2=t2+ph2-v2/maxv*ph2;if(has){sv+=`<rect x="${cx-bw}" y="${y1}" width="${bw-2}" height="${t2+ph2-y1}" fill="#f59e0b" rx="2"/><rect x="${cx+2}" y="${y2}" width="${bw-2}" height="${t2+ph2-y2}" fill="#3b82f6" rx="2"/>`; }else sv+=`<rect x="${cx-bw/2}" y="${y1}" width="${bw}" height="${t2+ph2-y1}" fill="#f59e0b" rx="2"/>`;if(ac[lab]!=null)pts1.push(`${cx},${t2+ph2-(ac[lab]/100)*ph2}`);if(bc[lab]!=null)pts2.push(`${cx},${t2+ph2-(bc[lab]/100)*ph2}`);sv+=`<text x="${cx}" y="${t2+ph2+17}" text-anchor="middle" font-size="7" fill="#94a3b8">${summarySvgEscape(lab.length>14?lab.slice(0,14)+'…':lab)}</text>`;});if(pts1.length)sv+=`<polyline points="${pts1.join(' ')}" fill="none" stroke="#f59e0b" stroke-width="2"/>`;if(pts2.length)sv+=`<polyline points="${pts2.join(' ')}" fill="none" stroke="#3b82f6" stroke-width="2"/>`;sv+=`<text x="${l2}" y="184" font-size="7" fill="#f59e0b">${p1} cumulative %</text>`;if(has)sv+=`<text x="${l2+125}" y="184" font-size="7" fill="#3b82f6">${p2} cumulative %</text>`;setHost('chart-summary-pareto',sv+'</svg>');
+                labels3.forEach((lab,i)=>{const cx=l2+i*g+g/2,v1=am[lab]||0,v2=bm[lab]||0,y1=t2+ph2-v1/maxv*ph2,y2=t2+ph2-v2/maxv*ph2;if(has){sv+=`<rect x="${cx-bw}" y="${y1}" width="${bw-2}" height="${t2+ph2-y1}" fill="#f59e0b" rx="2"/><rect x="${cx+2}" y="${y2}" width="${bw-2}" height="${t2+ph2-y2}" fill="#3b82f6" rx="2"/>`; }else sv+=`<rect x="${cx-bw/2}" y="${y1}" width="${bw}" height="${t2+ph2-y1}" fill="#f59e0b" rx="2"/>`;if(ac[lab]!=null)pts1.push(`${cx},${t2+ph2-(ac[lab]/100)*ph2}`);if(bc[lab]!=null)pts2.push(`${cx},${t2+ph2-(bc[lab]/100)*ph2}`);sv+=`<text x="${cx}" y="${t2+ph2+17}" text-anchor="middle" font-size="7" fill="#94a3b8">${summarySvgEscape(lab.length>14?lab.slice(0,14)+'…':lab)}</text>`;});if(pts1.length)sv+=`<polyline points="${pts1.join(' ')}" fill="none" stroke="#f59e0b" stroke-width="2"/>`;if(pts2.length)sv+=`<polyline points="${pts2.join(' ')}" fill="none" stroke="#3b82f6" stroke-width="2"/>`;sv+=`<text x="${l2}" y="184" font-size="7" fill="#f59e0b">${p1} cumulative % • Total ${aP.total.toFixed(1)} hrs</text>`;if(has)sv+=`<text x="${l2+125}" y="184" font-size="7" fill="#3b82f6">${p2} cumulative % • Total ${bP.total.toFixed(1)} hrs</text>`;setHost('chart-summary-pareto',sv+'</svg>');
             } catch(e){console.error('Executive Summary fallback chart error:',e);}
         }
 
@@ -3783,7 +3783,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const hasCompare = !!paretoComparison;
 
             if (typeof Chart === 'undefined') {
-                renderSummaryChartsFallbackSafe(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel);
+                renderSummaryChartsFallbackSafe(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel, primaryDowntimeLogs, compareDowntimeLogs);
                 ensureChartJsLoaded().then(ok => { if (ok) renderSummaryModule(); });
                 return;
             }
@@ -3853,49 +3853,85 @@ window.addEventListener("cloudsync:status", (event) => {
                 options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:9,padding:7,font:{size:7},color:'#94a3b8'}}},scales:{x:{stacked:true,ticks:{font:{size:8},color:'#94a3b8'},grid:{display:false}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:8},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,.35)'}}}}
             });
 
-            // 3) Downtime Pareto — TOP 3 EQUIPMENT for each selected period,
-            // with cumulative percentage lines. This is intentionally equipment-based,
-            // not one bar per line category.
-            const buildTop3Equipment = logs => {
+            // Downtime Pareto — Top 3 Equipment + Other.
+            // IMPORTANT: use the exact same filtered downtime totals as the
+            // Line Category Pareto above. This guarantees the equipment Pareto
+            // total and cumulative percentage cannot show 0.0 when the Line
+            // Category Pareto already has downtime (for example 21.5 hrs).
+            const linePrimaryTotal = Array.isArray(sortedLinePareto)
+                ? sortedLinePareto.reduce((sum,x)=>sum+Number(x.duration||0),0) : 0;
+            const lineCompareTotal = hasCompare && Array.isArray(paretoComparison?.compare)
+                ? paretoComparison.compare.reduce((sum,x)=>sum+Number(x.duration||0),0) : 0;
+
+            const buildTop3PlusOther = (logs, referenceTotal) => {
                 const map = {};
                 (logs || []).forEach(dt => {
                     const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g,' ');
-                    const s = new Date(dt.start), e = new Date(dt.end);
-                    const dur = Math.max(0,(e-s)/(1000*60*60));
-                    map[equipment] = (map[equipment] || 0) + dur;
+                    const d = Math.max(0,(new Date(dt.end)-new Date(dt.start))/(1000*60*60));
+                    if (d > 0) map[equipment] = (map[equipment] || 0) + d;
                 });
-                return Object.entries(map).map(([equipment,duration])=>({equipment,duration})).sort((a,b)=>b.duration-a.duration).slice(0,3);
+                const all = Object.entries(map)
+                    .map(([equipment,duration])=>({equipment,duration}))
+                    .sort((a,b)=>b.duration-a.duration);
+                const rawTotal = all.reduce((sum,x)=>sum+x.duration,0);
+                // The Line Category Pareto is the source of truth for the selected
+                // period total. It uses the same records/date filter. Use it so
+                // "Other" carries any remainder and cumulative always reaches 100%.
+                const total = Number.isFinite(Number(referenceTotal)) && Number(referenceTotal) > 0
+                    ? Number(referenceTotal) : rawTotal;
+                const top3 = all.slice(0,3);
+                const top3Hours = top3.reduce((sum,x)=>sum+x.duration,0);
+                const otherHours = Math.max(0,total-top3Hours);
+                const items = [...top3,{equipment:'Other',duration:otherHours}];
+                let running = 0;
+                items.forEach(x=>{
+                    running += x.duration;
+                    x.cumulativePercent = total > 0 ? Math.min(100,(running/total)*100) : 0;
+                });
+                // If equipment aggregation ever differs from the line total, force
+                // the final Other cumulative point to exactly 100%.
+                if (items.length && total > 0) items[items.length-1].cumulativePercent = 100;
+                return {items,total};
             };
-            const primary3 = buildTop3Equipment(primaryDowntimeLogs || []);
-            const compare3 = hasCompare ? buildTop3Equipment(compareDowntimeLogs || []) : [];
-            // Fallback to the already calculated primary line records only if the
-            // comparison object is absent; normally paretoComparison is populated above.
-            const primaryLogs = primaryDowntimeLogs || [];
-            const primaryTotal = primaryLogs.reduce((sum,x)=>sum+Number(x.duration||0),0);
-            const compareLogs = compareDowntimeLogs || [];
-            const compareTotal = compareLogs.reduce((sum,x)=>sum+Number(x.duration||0),0);
-            const equipmentLabels = [...new Set([...primary3.map(x=>x.equipment), ...compare3.map(x=>x.equipment)])];
-            const primaryMap = Object.fromEntries(primary3.map(x=>[x.equipment,x.duration]));
-            const compareMap = Object.fromEntries(compare3.map(x=>[x.equipment,x.duration]));
-            const primaryCum = {}; let acc=0; primary3.forEach(x=>{acc+=x.duration;primaryCum[x.equipment]=primaryTotal?acc/primaryTotal*100:0;});
-            const compareCum = {}; acc=0; compare3.forEach(x=>{acc+=x.duration;compareCum[x.equipment]=compareTotal?acc/compareTotal*100:0;});
+
+            const primaryPareto = buildTop3PlusOther(primaryDowntimeLogs || [], linePrimaryTotal);
+            const comparePareto = hasCompare
+                ? buildTop3PlusOther(compareDowntimeLogs || [], lineCompareTotal)
+                : {items:[],total:0};
+            const primaryTotal = linePrimaryTotal || primaryPareto.total;
+            const compareTotal = lineCompareTotal || comparePareto.total;
+
+            // Keep the equipment categories from both dates, but always put Other last.
+            const equipmentLabels = [...new Set([
+                ...primaryPareto.items.filter(x=>x.equipment!=='Other').map(x=>x.equipment),
+                ...comparePareto.items.filter(x=>x.equipment!=='Other').map(x=>x.equipment),
+                'Other'
+            ])];
+            const primaryMap = Object.fromEntries(primaryPareto.items.map(x=>[x.equipment,x.duration]));
+            const compareMap = Object.fromEntries(comparePareto.items.map(x=>[x.equipment,x.duration]));
+            const primaryCum = Object.fromEntries(primaryPareto.items.map(x=>[x.equipment,x.cumulativePercent]));
+            const compareCum = Object.fromEntries(comparePareto.items.map(x=>[x.equipment,x.cumulativePercent]));
+
             const paretoTitle = document.getElementById('summary-pareto-title');
             if (paretoTitle) paretoTitle.textContent = hasCompare
-                ? `Downtime Pareto — Top 3 Equipment | ${p1}: ${primaryTotal.toFixed(1)} hrs vs ${p2}: ${compareTotal.toFixed(1)} hrs`
-                : `Downtime Pareto — Top 3 Equipment | ${p1}: ${primaryTotal.toFixed(1)} hrs`;
+                ? `Downtime Pareto — Top 3 Equipment + Other | ${p1} Total: ${primaryTotal.toFixed(1)} hrs vs ${p2} Total: ${compareTotal.toFixed(1)} hrs`
+                : `Downtime Pareto — Top 3 Equipment + Other | ${p1} Total: ${primaryTotal.toFixed(1)} hrs`;
 
             const ctxPareto = paretoCanvas.getContext('2d');
             if (chartSummaryPareto) chartSummaryPareto.destroy();
+
             const datasets = hasCompare ? [
-                {type:'bar',label:`${p1} Downtime`,data:equipmentLabels.map(x=>Number(primaryMap[x]||0).toFixed(1)),backgroundColor:'#f59e0b',yAxisID:'y',order:2},
-                {type:'bar',label:`${p2} Downtime`,data:equipmentLabels.map(x=>Number(compareMap[x]||0).toFixed(1)),backgroundColor:'#3b82f6',yAxisID:'y',order:2},
+                {type:'bar',label:`${p1} Downtime`,data:equipmentLabels.map(x=>Number((primaryMap[x]||0).toFixed(2))),backgroundColor:'#f59e0b',yAxisID:'y',order:2},
+                {type:'bar',label:`${p2} Downtime`,data:equipmentLabels.map(x=>Number((compareMap[x]||0).toFixed(2))),backgroundColor:'#3b82f6',yAxisID:'y',order:2},
                 {type:'line',label:`${p1} Cumulative %`,data:equipmentLabels.map(x=>primaryCum[x] ?? null),borderColor:'#f59e0b',backgroundColor:'#f59e0b',yAxisID:'y1',tension:.2,pointRadius:3,fill:false,order:1},
                 {type:'line',label:`${p2} Cumulative %`,data:equipmentLabels.map(x=>compareCum[x] ?? null),borderColor:'#3b82f6',backgroundColor:'#3b82f6',yAxisID:'y1',tension:.2,pointRadius:3,fill:false,order:1}
             ] : [
-                {type:'bar',label:'Downtime (hrs)',data:equipmentLabels.map(x=>Number(primaryMap[x]||0).toFixed(1)),backgroundColor:'#f59e0b',yAxisID:'y',order:2},
+                {type:'bar',label:'Downtime (hrs)',data:equipmentLabels.map(x=>Number((primaryMap[x]||0).toFixed(2))),backgroundColor:'#f59e0b',yAxisID:'y',order:2},
                 {type:'line',label:'Cumulative %',data:equipmentLabels.map(x=>primaryCum[x] ?? null),borderColor:'#f59e0b',backgroundColor:'#f59e0b',yAxisID:'y1',tension:.2,pointRadius:3,fill:false,order:1}
             ];
-            chartSummaryPareto = new Chart(ctxPareto,{type:'bar',data:{labels:equipmentLabels.length?equipmentLabels:['No Data'],datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:8,padding:6,font:{size:7},color:'#94a3b8'}},tooltip:{mode:'index',intersect:false}},scales:{x:{ticks:{font:{size:8},color:'#94a3b8',maxRotation:25,minRotation:0},grid:{display:false}},y:{beginAtZero:true,title:{display:true,text:'Downtime (hrs)',font:{size:8}},ticks:{font:{size:8},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.35)'}},y1:{position:'right',beginAtZero:true,max:100,title:{display:true,text:'Cumulative %',font:{size:8}},ticks:{font:{size:8},color:'#94a3b8',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
+
+            chartSummaryPareto = new Chart(ctxPareto,{type:'bar',data:{labels:equipmentLabels.length?equipmentLabels:['No Data'],datasets},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom',labels:{boxWidth:8,padding:6,font:{size:7},color:'#94a3b8'}},tooltip:{mode:'index',intersect:false}},scales:{x:{ticks:{font:{size:8},color:'#94a3b8',maxRotation:25,minRotation:0},grid:{display:false}},y:{beginAtZero:true,title:{display:true,text:'Downtime (hrs)',font:{size:8}},ticks:{font:{size:8},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.35)'}},y1:{position:'right',beginAtZero:true,min:0,max:100,title:{display:true,text:'Cumulative %',font:{size:8}},ticks:{font:{size:8},color:'#94a3b8',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
+
         }
 
         // --- MODULE 1: CALIBRATION TRACKER ---
