@@ -3317,6 +3317,14 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             }
 
+            // Supporting-detail plant definitions must exist before System Reliability
+            // renders. Keeping these declarations above all dependent sections prevents
+            // a temporal-dead-zone error from stopping the Executive Summary renderer.
+            const allSummaryPlants = ["Plant 1", "Plant 2", "PreMix"];
+            const summaryPlants = currentPlant === "ALL"
+                ? allSummaryPlants
+                : allSummaryPlants.filter(p => normalizePlant(p) === normalizePlant(currentPlant));
+
             // System Reliability detail by plant. This section was present in the HTML
             // but had no renderer, which caused the large blank area under the KPI cards.
             const reliabilityReports = document.getElementById("summary-per-plant-reports");
@@ -3350,7 +3358,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         const r = calcReliability(logs);
                         const lineMap = {};
                         logs.forEach(dt => {
-                            const line = String(dt.line || "Unclassified Line").trim().replace(/\\s+/g, " ");
+                            const line = String(dt.line || "Unclassified Line").trim().replace(/\s+/g, " ");
                             const st = new Date(dt.start), en = new Date(dt.end);
                             const h = Math.max(0, (en - st) / 3600000);
                             lineMap[line] = (lineMap[line] || 0) + (Number.isFinite(h) ? h : 0);
@@ -3472,11 +3480,6 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Supporting details: one row per plant, always visible. The main plant filter
             // controls which rows are shown; calibration totals external + internal schedules.
-            const allSummaryPlants = ["Plant 1", "Plant 2", "PreMix"];
-            const summaryPlants = currentPlant === "ALL"
-                ? allSummaryPlants
-                : allSummaryPlants.filter(p => normalizePlant(p) === normalizePlant(currentPlant));
-
             const calibByPlant = {};
             const projectByPlant = {};
             allSummaryPlants.forEach(p => {
