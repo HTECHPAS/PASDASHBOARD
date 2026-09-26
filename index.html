@@ -3686,24 +3686,34 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function buildTop3OtherPareto(items) {
-            const top = (items || []).slice(0, 3).map((item, index) => ({
+            const source = items || [];
+            const top = source.slice(0, 3).map((item, index) => ({
                 rank: index + 1,
                 bucket: item.equipment || 'Unspecified Equipment',
-                line: item.line,
+                line: item.line || 'Unclassified Line',
                 duration: Number(item.duration || 0),
                 equipment: item.equipment || '—',
-                category: item.category || '—'
+                category: item.category || '—',
+                equipmentList: item.equipment ? [item.equipment] : [],
+                lineList: item.line ? [item.line] : []
             }));
-            const otherHours = (items || []).slice(3).reduce((sum, item) => sum + Number(item.duration || 0), 0);
-            if ((items || []).length > 3) top.push({
+            const remaining = source.slice(3);
+            const otherHours = remaining.reduce((sum, item) => sum + Number(item.duration || 0), 0);
+            const otherEquipment = [...new Set(remaining.map(item => item.equipment).filter(Boolean))];
+            const otherLines = [...new Set(remaining.map(item => item.line).filter(Boolean))];
+            const otherCategories = [...new Set(remaining.map(item => item.category).filter(Boolean))];
+            if (remaining.length) top.push({
                 rank: 4,
                 bucket: 'Other',
-                line: 'All remaining lines',
+                line: otherLines.length ? otherLines.join(', ') : 'All remaining lines',
                 duration: otherHours,
-                equipment: 'All remaining equipment',
-                category: 'All remaining failure categories'
+                equipment: otherEquipment.length ? otherEquipment.join(', ') : 'All remaining equipment',
+                category: otherCategories.length ? otherCategories.join(', ') : 'All remaining failure categories',
+                equipmentList: otherEquipment,
+                lineList: otherLines,
+                categoryList: otherCategories
             });
-            while (top.length < 4) top.push({ rank: top.length + 1, bucket: top.length === 3 ? 'Other' : 'Unspecified Equipment', line: 'No data', duration: 0, equipment: '—', category: '—' });
+            while (top.length < 4) top.push({ rank: top.length + 1, bucket: top.length === 3 ? 'Other' : 'No data', line: 'No data', duration: 0, equipment: '—', category: '—', equipmentList: [], lineList: [] });
             return top.slice(0, 4);
         }
 
@@ -3780,9 +3790,12 @@ window.addEventListener("cloudsync:status", (event) => {
             if (!host) {
                 host = document.createElement('div');
                 host.className = 'native-pareto-chart w-full';
-                host.style.height = '220px';
                 hostParent.appendChild(host);
             }
+            host.style.display = 'block';
+            host.style.width = '100%';
+            host.style.minHeight = '300px';
+            host.style.height = '300px';
             const pItems = buildTop3OtherPareto(buildParetoLineItems(primaryLogs || []));
             const cItems = buildTop3OtherPareto(buildParetoLineItems(compareLogs || []));
             const isCompare = !!compareLabel;
@@ -3791,35 +3804,45 @@ window.addEventListener("cloudsync:status", (event) => {
             let pCum=0,cCum=0;
             const pPct=pItems.map(x=>{pCum += pTotal ? Number(x.duration||0)/pTotal*100 : 0; return pCum;});
             const cPct=cItems.map(x=>{cCum += cTotal ? Number(x.duration||0)/cTotal*100 : 0; return cCum;});
-            const W=760,H=220,L=42,R=42,T=12,B=52,plotW=W-L-R,plotH=H-T-B;
+            const W=900,H=270,L=55,R=55,T=18,B=72,plotW=W-L-R,plotH=H-T-B;
             const max=Math.max(1,...pItems.map(x=>Number(x.duration||0)),...(isCompare?cItems.map(x=>Number(x.duration||0)):[]));
-            const groupW=plotW/4, barW=isCompare?Math.min(30,groupW*.25):Math.min(42,groupW*.36);
+            const groupW=plotW/4, barW=isCompare?Math.min(44,groupW*.22):Math.min(58,groupW*.34);
             const y=v=>T+plotH-(v/max)*plotH, py=v=>T+plotH-(v/100)*plotH;
-            let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" role="img" aria-label="Downtime Pareto">`;
-            for(let i=0;i<=4;i++){const yy=T+plotH-(plotH*i/4),vv=max*i/4;svg+=`<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#334155" stroke-width="1" opacity=".45"/><text x="${L-5}" y="${yy+3}" text-anchor="end" font-size="9" fill="#94a3b8">${vv.toFixed(1)}</text>`;}
-            for(let i=0;i<=5;i++){const yy=T+plotH-(plotH*i/5);svg+=`<text x="${W-R+5}" y="${yy+3}" font-size="8" fill="#94a3b8">${i*20}%</text>`;}
+            let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="270" role="img" aria-label="Downtime Pareto by specific equipment" style="display:block">`;
+            for(let i=0;i<=4;i++){const yy=T+plotH-(plotH*i/4),vv=max*i/4;svg+=`<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#334155" stroke-width="1" opacity=".45"/><text x="${L-7}" y="${yy+4}" text-anchor="end" font-size="10" fill="#94a3b8">${vv.toFixed(1)}</text>`;}
+            for(let i=0;i<=5;i++){const yy=T+plotH-(plotH*i/5);svg+=`<text x="${W-R+7}" y="${yy+4}" font-size="9" fill="#94a3b8">${i*20}%</text>`;}
             const pointsP=[],pointsC=[];
             pItems.forEach((item,i)=>{
                 const cx=L+groupW*i+groupW/2;
-                const pv=Number(item.duration||0), ph=(pv/max)*plotH, px=isCompare?cx-barW-3:cx-barW/2;
+                const pv=Number(item.duration||0), ph=(pv/max)*plotH, px=isCompare?cx-barW-5:cx-barW/2;
                 svg+=`<rect x="${px.toFixed(1)}" y="${y(pv).toFixed(1)}" width="${barW}" height="${Math.max(0,ph).toFixed(1)}" rx="5" fill="#ef4444"><title>${escapeHtml(item.bucket+' — '+item.line+' | Equipment: '+item.equipment+' | Failure: '+item.category+' | '+pv.toFixed(1)+' hrs')}</title></rect>`;
-                if(pv>0)svg+=`<text x="${(px+barW/2).toFixed(1)}" y="${Math.max(10,y(pv)-4).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#e2e8f0">${pv.toFixed(1)}</text>`;
+                if(pv>0)svg+=`<text x="${(px+barW/2).toFixed(1)}" y="${Math.max(14,y(pv)-5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${pv.toFixed(1)}</text>`;
                 pointsP.push(`${cx},${py(pPct[i])}`);
-                if(isCompare){const cv=Number(cItems[i]?.duration||0),ch=(cv/max)*plotH,cx2=cx+3;svg+=`<rect x="${cx2.toFixed(1)}" y="${y(cv).toFixed(1)}" width="${barW}" height="${Math.max(0,ch).toFixed(1)}" rx="5" fill="#3b82f6"><title>${escapeHtml(cItems[i].bucket+' — '+cItems[i].line+' | Equipment: '+cItems[i].equipment+' | Failure: '+cItems[i].category+' | '+cv.toFixed(1)+' hrs')}</title></rect>`;if(cv>0)svg+=`<text x="${(cx2+barW/2).toFixed(1)}" y="${Math.max(10,y(cv)-4).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#e2e8f0">${cv.toFixed(1)}</text>`;pointsC.push(`${cx+barW/2+3},${py(cPct[i])}`);}
-                svg+=`<text x="${cx}" y="${H-36}" text-anchor="middle" font-size="8" font-weight="700" fill="#cbd5e1">${escapeHtml(item.equipment || item.bucket)}</text>`;
-                svg+=`<text x="${cx}" y="${H-24}" text-anchor="middle" font-size="7.2" fill="#94a3b8">${escapeHtml(item.line)}</text>`;
-                if(isCompare){ svg+=`<text x="${cx}" y="${H-13}" text-anchor="middle" font-size="6.8" fill="#60a5fa">vs ${escapeHtml(cItems[i]?.equipment || '—')}</text>`; }
+                if(isCompare){
+                    const ci=cItems[i]||{duration:0,equipment:'—',line:'No data',category:'—'},cv=Number(ci.duration||0),ch=(cv/max)*plotH,cx2=cx+5;
+                    svg+=`<rect x="${cx2.toFixed(1)}" y="${y(cv).toFixed(1)}" width="${barW}" height="${Math.max(0,ch).toFixed(1)}" rx="5" fill="#3b82f6"><title>${escapeHtml(ci.bucket+' — '+ci.line+' | Equipment: '+ci.equipment+' | Failure: '+ci.category+' | '+cv.toFixed(1)+' hrs')}</title></rect>`;
+                    if(cv>0)svg+=`<text x="${(cx2+barW/2).toFixed(1)}" y="${Math.max(14,y(cv)-5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${cv.toFixed(1)}</text>`;
+                    pointsC.push(`${cx+barW/2+5},${py(cPct[i])}`);
+                }
+                const pEquip = String(item.equipment || item.bucket || '—');
+                const cEquip = String((cItems[i] && cItems[i].equipment) || '—');
+                const pShort = pEquip.length>22 ? pEquip.slice(0,21)+'…' : pEquip;
+                const cShort = cEquip.length>22 ? cEquip.slice(0,21)+'…' : cEquip;
+                svg+=`<text x="${cx}" y="${H-49}" text-anchor="middle" font-size="9" font-weight="700" fill="#e2e8f0">${escapeHtml(pShort)}</text>`;
+                svg+=`<text x="${cx}" y="${H-35}" text-anchor="middle" font-size="8" fill="#94a3b8">${escapeHtml(item.line || '—')}</text>`;
+                if(isCompare) svg+=`<text x="${cx}" y="${H-21}" text-anchor="middle" font-size="7.5" fill="#60a5fa">vs ${escapeHtml(cShort)}</text>`;
             });
             svg+=`<polyline points="${pointsP.join(' ')}" fill="none" stroke="#f97316" stroke-width="2.5"/>`;
             pointsP.forEach(pt=>{const [xv,yv]=pt.split(',');svg+=`<circle cx="${xv}" cy="${yv}" r="3" fill="#f97316"/>`;});
             if(isCompare){svg+=`<polyline points="${pointsC.join(' ')}" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-dasharray="6 4"/>`;pointsC.forEach(pt=>{const [xv,yv]=pt.split(',');svg+=`<circle cx="${xv}" cy="${yv}" r="3" fill="#22c55e"/>`;});}
-            svg+=`<text x="${L}" y="10" font-size="8" fill="#94a3b8">Downtime (hrs)</text><text x="${W-R-5}" y="10" text-anchor="end" font-size="8" fill="#94a3b8">Cumulative %</text>`;
-            svg+=`<g transform="translate(${L},${H-10})"><rect width="9" height="9" rx="2" fill="#ef4444"/><text x="13" y="8" font-size="8" fill="#94a3b8">${summarySvgEscape(primaryLabel||'Date 1')}</text>`;
-            if(isCompare){const off=110+String(primaryLabel||'Date 1').length*4.8;svg+=`<rect x="${off}" width="9" height="9" rx="2" fill="#3b82f6"/><text x="${off+13}" y="8" font-size="8" fill="#94a3b8">${summarySvgEscape(compareLabel)}</text><rect x="${off+105}" width="9" height="9" rx="2" fill="#f97316"/><text x="${off+118}" y="8" font-size="8" fill="#94a3b8">Cumulative ${summarySvgEscape(primaryLabel||'Date 1')}</text><rect x="${off+250}" width="9" height="9" rx="2" fill="#22c55e"/><text x="${off+263}" y="8" font-size="8" fill="#94a3b8">Cumulative ${summarySvgEscape(compareLabel)}</text>`;}
-            else svg+=`<rect x="${110+String(primaryLabel||'Date 1').length*4.8}" width="9" height="9" rx="2" fill="#f97316"/><text x="${123+String(primaryLabel||'Date 1').length*4.8}" y="8" font-size="8" fill="#94a3b8">Cumulative %</text>`;
+            svg+=`<text x="${L}" y="12" font-size="9" fill="#94a3b8">Downtime (hrs)</text><text x="${W-R}" y="12" text-anchor="end" font-size="9" fill="#94a3b8">Cumulative %</text>`;
+            svg+=`<g transform="translate(${L},${H-7})"><rect width="10" height="10" rx="2" fill="#ef4444"/><text x="14" y="9" font-size="8.5" fill="#94a3b8">${summarySvgEscape(primaryLabel||'Date 1')}</text>`;
+            if(isCompare){const off=145+String(primaryLabel||'Date 1').length*4.8;svg+=`<rect x="${off}" width="10" height="10" rx="2" fill="#3b82f6"/><text x="${off+14}" y="9" font-size="8.5" fill="#94a3b8">${summarySvgEscape(compareLabel)}</text><rect x="${off+125}" width="10" height="10" rx="2" fill="#f97316"/><text x="${off+139}" y="9" font-size="8.5" fill="#94a3b8">Cumulative ${summarySvgEscape(primaryLabel||'Date 1')}</text><rect x="${off+275}" width="10" height="10" rx="2" fill="#22c55e"/><text x="${off+289}" y="9" font-size="8.5" fill="#94a3b8">Cumulative ${summarySvgEscape(compareLabel)}</text>`;}
+            else svg+=`<rect x="${145+String(primaryLabel||'Date 1').length*4.8}" width="10" height="10" rx="2" fill="#f97316"/><text x="${159+String(primaryLabel||'Date 1').length*4.8}" y="9" font-size="8.5" fill="#94a3b8">Cumulative %</text>`;
             svg+='</g></svg>';
-            host.innerHTML=svg;
-            const note=document.getElementById(noteId); if(note){const desc=a=>a.slice(0,3).map(i=>`${i.equipment || i.bucket} (${i.line})`).join(' • ');note.innerHTML=isCompare?`${summarySvgEscape(primaryLabel||'Date 1')}: ${summarySvgEscape(desc(pItems))}<br>${summarySvgEscape(compareLabel)}: ${summarySvgEscape(desc(cItems))}`:summarySvgEscape(desc(pItems));}
+            const details = (label, arr) => arr.map((i,idx)=>`<div style="padding:4px 7px;border-bottom:1px solid rgba(51,65,85,.35)"><b style="color:#e2e8f0">${idx<3?'Top '+(idx+1):'Other'}:</b> <span style="color:#f8fafc">${escapeHtml(i.equipment||'—')}</span> <span style="color:#94a3b8">| ${escapeHtml(i.line||'—')} | ${Number(i.duration||0).toFixed(1)} hrs</span></div>`).join('');
+            host.innerHTML = svg + `<div style="margin-top:3px;font-size:9px;line-height:1.35;color:#94a3b8;border-top:1px solid rgba(51,65,85,.4)">${details(primaryLabel||'Date 1',pItems)}${isCompare?details(compareLabel,cItems):''}</div>`;
+            const note=document.getElementById(noteId); if(note){const desc=a=>a.map(i=>`${i.equipment||'—'} (${i.line||'—'})`).join(' • ');note.innerHTML=isCompare?`${summarySvgEscape(primaryLabel||'Date 1')}: ${summarySvgEscape(desc(pItems))}<br>${summarySvgEscape(compareLabel)}: ${summarySvgEscape(desc(cItems))}`:summarySvgEscape(desc(pItems));}
         }
 
         function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel) {
