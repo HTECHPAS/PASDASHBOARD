@@ -1186,18 +1186,18 @@ window.addEventListener("cloudsync:status", (event) => {
                             <div id="summary-per-plant-reports" class="space-y-3"></div>
 
                             <div class="space-y-2">
-                                <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
+
+                                </div>
                                 <div class="overflow-x-auto rounded-xl border border-slate-700/50">
                                     <table class="w-full text-left text-xs text-slate-300">
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                             <tr>
                                                 <th class="py-1.5 px-2">Line Category</th>
-                                                <th class="py-2.5 px-3">Date 1 — Equipment</th>
-                                                <th class="py-2.5 px-3">Date 1 — Failure</th>
-                                                <th class="py-2.5 px-3 text-center">Date 1 — Time</th>
-                                                <th class="py-2.5 px-3">Date 2 — Equipment</th>
-                                                <th class="py-2.5 px-3">Date 2 — Failure</th>
-                                                <th class="py-2.5 px-3 text-center">Date 2 — Time</th>
+                                                <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">Equipment</th>
+                                                <th id="summary-top5-primary-failure-head" class="py-2.5 px-3">Failure Category</th>
+                                                <th id="summary-top5-primary-time-head" class="py-2.5 px-3 text-center">Downtime</th>
                                             </tr>
                                         </thead>
                                         <tbody id="summary-top5-downtime-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
@@ -1613,16 +1613,20 @@ window.addEventListener("cloudsync:status", (event) => {
                         <p class="text-xs text-slate-400">Track milestones, upgrade timelines & plant engineering roadmaps</p>
                     </div>
                     <div class="flex items-center gap-2 flex-wrap no-print">
-                        <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
+                        <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs flex-wrap">
                             <i class="fa-solid fa-filter text-slate-400"></i>
-                            <span class="text-slate-300 font-semibold">Filter Year:</span>
-                            <select id="projects-year-filter" onchange="renderProjectsModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
-                                <option value="ALL" class="bg-slate-800">All Years</option>
-                                <option value="2025" class="bg-slate-800">2025</option>
-                                <option value="2026" class="bg-slate-800" selected>2026</option>
-                                <option value="2027" class="bg-slate-800">2027</option>
-                                <option value="2028" class="bg-slate-800">2028</option>
+                            <span class="text-slate-300 font-semibold">Filter Date:</span>
+                            <select id="projects-date-filter-type" onchange="onProjectsDateFilterTypeChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
+                                <option value="ALL" class="bg-slate-800">All Dates</option>
+                                <option value="YEAR" class="bg-slate-800">By Year</option>
+                                <option value="MONTH" class="bg-slate-800">By Month</option>
+                                <option value="RANGE" class="bg-slate-800">Custom Date Range</option>
                             </select>
+                            <select id="projects-year-filter" onchange="renderProjectsModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden"></select>
+                            <input type="month" id="projects-month-filter" onchange="renderProjectsModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden">
+                            <input type="date" id="projects-date-from" onchange="renderProjectsModule()" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 hidden">
+                            <span id="projects-date-to-label" class="text-slate-500 hidden">to</span>
+                            <input type="date" id="projects-date-to" onchange="renderProjectsModule()" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 hidden">
                         </div>
                         <button onclick="downloadModuleExcel('projects')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-emerald-600/20">
                             <i class="fa-solid fa-file-excel"></i> Excel (.xlsx)
@@ -3281,24 +3285,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             }
 
-            // Top Equipment = ONE row per Line Category. Aggregate by Equipment + Failure Category and keep only the highest total downtime for each line.
-            const lineEquipmentMap = {};
-            filteredDt.forEach(dt => {
-                const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
-                const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
-                const s = new Date(dt.start);
-                const e = new Date(dt.end);
-                const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
-                if (!lineEquipmentMap[line]) lineEquipmentMap[line] = {};
-                const key = `${equipment}|||${category}`;
-                if (!lineEquipmentMap[line][key]) lineEquipmentMap[line][key] = { line, equipment, category, duration: 0 };
-                lineEquipmentMap[line][key].duration += dur;
-            });
-            const topEquipmentByLine = Object.values(lineEquipmentMap).map(group =>
-                Object.values(group).sort((a,b) => b.duration - a.duration)[0]
-            ).filter(Boolean).sort((a,b) => b.duration - a.duration);
-
+            // Top Equipment = ONE row per Line Category. Ranking follows the LINE'S TOTAL DOWNTIME.
+            // The displayed equipment is the highest-downtime Equipment + Failure Category contributor within that line.
             const buildTopEquipmentByLine = logs => {
                 const map = {};
                 (logs || []).forEach(dt => {
@@ -3306,35 +3294,38 @@ window.addEventListener("cloudsync:status", (event) => {
                     const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
                     const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
                     const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
-                    if (!map[line]) map[line] = {};
+                    if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
+                    map[line].lineTotal += dur;
                     const key = `${equipment}|||${category}`;
-                    if (!map[line][key]) map[line][key] = { line, equipment, category, duration: 0 };
-                    map[line][key].duration += dur;
+                    if (!map[line].contributors[key]) map[line].contributors[key] = { line, equipment, category, duration: 0 };
+                    map[line].contributors[key].duration += dur;
                 });
-                return Object.values(map).map(group => Object.values(group).sort((a,b)=>b.duration-a.duration)[0]).filter(Boolean).sort((a,b)=>b.duration-a.duration);
+                return Object.values(map).map(lineItem => {
+                    const top = Object.values(lineItem.contributors).sort((a,b)=>b.duration-a.duration)[0];
+                    return { ...top, lineTotal: lineItem.lineTotal };
+                }).filter(Boolean).sort((a,b)=>b.lineTotal-a.lineTotal);
             };
             const primaryTopByLine = buildTopEquipmentByLine(filteredDt);
-            const compareTopByLine = isCompare ? buildTopEquipmentByLine(comparisonDt) : [];
-            const compareByLine = Object.fromEntries(compareTopByLine.map(x => [x.line, x]));
             const top5Body = document.getElementById("summary-top5-downtime-body");
+            const top5PLabel = primaryValue || 'Selected Period';
+            const top5PrimaryEquipmentHead = document.getElementById("summary-top5-primary-equipment-head");
+            const top5PrimaryFailureHead = document.getElementById("summary-top5-primary-failure-head");
+            const top5PrimaryTimeHead = document.getElementById("summary-top5-primary-time-head");
+            if (top5PrimaryEquipmentHead) top5PrimaryEquipmentHead.textContent = `${top5PLabel} — Equipment`;
+            if (top5PrimaryFailureHead) top5PrimaryFailureHead.textContent = `${top5PLabel} — Failure Category`;
+            if (top5PrimaryTimeHead) top5PrimaryTimeHead.textContent = `${top5PLabel} — Downtime`;
             top5Body.innerHTML = "";
-            if (primaryTopByLine.length === 0 && compareTopByLine.length === 0) {
-                top5Body.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-slate-500 italic">No downtime records found for the selected period(s).</td></tr>`;
+            if (primaryTopByLine.length === 0) {
+                top5Body.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-slate-500 italic">No downtime records found for ${escapeHtml(top5PLabel)}.</td></tr>`;
             } else {
-                const lines = [...new Set([...primaryTopByLine.map(x=>x.line), ...compareTopByLine.map(x=>x.line)])];
-                lines.forEach(line => {
-                    const a = primaryTopByLine.find(x=>x.line===line) || null;
-                    const b = compareByLine[line] || null;
+                primaryTopByLine.forEach(item => {
                     const tr = document.createElement("tr");
                     tr.className = "hover:bg-slate-800/50 transition align-top";
                     tr.innerHTML = `
-                        <td class="py-2 px-2 font-semibold text-white">${escapeHtml(line)}</td>
-                        <td class="py-2 px-3 text-slate-200">${escapeHtml(a?.equipment || '—')}</td>
-                        <td class="py-2 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(a?.category || '—')}</span></td>
-                        <td class="py-2 px-3 text-center text-red-400 font-bold">${a ? a.duration.toFixed(1)+' hrs' : '—'}</td>
-                        <td class="py-2 px-3 text-slate-200">${escapeHtml(b?.equipment || '—')}</td>
-                        <td class="py-2 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(b?.category || '—')}</span></td>
-                        <td class="py-2 px-3 text-center text-blue-300 font-bold">${b ? b.duration.toFixed(1)+' hrs' : '—'}</td>
+                        <td class="py-2 px-2 font-semibold text-white">${escapeHtml(item.line)}</td>
+                        <td class="py-2 px-3 text-slate-200">${escapeHtml(item.equipment || '—')}</td>
+                        <td class="py-2 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>
+                        <td class="py-2 px-3 text-center text-red-400 font-bold">${item.duration.toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration).toFixed(1)} hrs</div></td>
                     `;
                     top5Body.appendChild(tr);
                 });
@@ -4262,13 +4253,51 @@ window.addEventListener("cloudsync:status", (event) => {
                 </div>`;
         }
 
+        function populateProjectsYearFilter() {
+            const select = document.getElementById("projects-year-filter");
+            if (!select) return;
+            const years = [...new Set(projectsList.map(pr => String(pr.date || '').slice(0,4)).filter(y => /^\d{4}$/.test(y)))].sort();
+            const current = String(new Date().getFullYear());
+            const previous = select.value;
+            select.innerHTML = `<option value="ALL" class="bg-slate-800">All Years</option>` + years.map(y => `<option value="${y}" class="bg-slate-800">${y}</option>`).join('');
+            if (years.includes(previous)) select.value = previous;
+            else if (years.includes(current)) select.value = current;
+            else select.value = 'ALL';
+        }
+
+        function onProjectsDateFilterTypeChange() {
+            const type = document.getElementById('projects-date-filter-type')?.value || 'ALL';
+            const year = document.getElementById('projects-year-filter');
+            const month = document.getElementById('projects-month-filter');
+            const from = document.getElementById('projects-date-from');
+            const to = document.getElementById('projects-date-to');
+            const toLabel = document.getElementById('projects-date-to-label');
+            [year, month, from, to, toLabel].forEach(el => el?.classList.add('hidden'));
+            if (type === 'YEAR') year?.classList.remove('hidden');
+            if (type === 'MONTH') month?.classList.remove('hidden');
+            if (type === 'RANGE') { from?.classList.remove('hidden'); to?.classList.remove('hidden'); toLabel?.classList.remove('hidden'); }
+            renderProjectsModule();
+        }
+
         function renderProjectsModule() {
-            const yearFilter = document.getElementById("projects-year-filter").value;
-            document.getElementById("projects-chart-year-badge").innerText = `Year: ${yearFilter}`;
+            populateProjectsYearFilter();
+            const type = document.getElementById("projects-date-filter-type")?.value || 'ALL';
+            const yearFilter = document.getElementById("projects-year-filter")?.value || 'ALL';
+            const monthFilter = document.getElementById("projects-month-filter")?.value || '';
+            const fromFilter = document.getElementById("projects-date-from")?.value || '';
+            const toFilter = document.getElementById("projects-date-to")?.value || '';
+            const dateText = type === 'YEAR' ? `Year: ${yearFilter}` : type === 'MONTH' ? `Month: ${monthFilter || '—'}` : type === 'RANGE' ? `Range: ${fromFilter || '—'} to ${toFilter || '—'}` : 'All Dates';
+            document.getElementById("projects-chart-year-badge").innerText = dateText;
 
             const filtered = projectsList.filter(pr => {
                 if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
-                if (yearFilter !== "ALL" && !String(pr.date || "").startsWith(yearFilter)) return false;
+                const d = String(pr.date || '').slice(0,10);
+                if (type === 'YEAR' && yearFilter !== 'ALL' && !d.startsWith(yearFilter)) return false;
+                if (type === 'MONTH' && monthFilter && !d.startsWith(monthFilter)) return false;
+                if (type === 'RANGE') {
+                    if (fromFilter && d < fromFilter) return false;
+                    if (toFilter && d > toFilter) return false;
+                }
                 return true;
             });
 
@@ -4276,7 +4305,7 @@ window.addEventListener("cloudsync:status", (event) => {
             container.innerHTML = "";
 
             if (filtered.length === 0) {
-                container.innerHTML = `<div class="col-span-full text-center py-8 text-slate-500 italic">No automation projects found for the selected year and plant.</div>`;
+                container.innerHTML = `<div class="col-span-full text-center py-8 text-slate-500 italic">No automation projects found for the selected date filter and plant.</div>`;
             } else {
                 filtered.forEach(pr => {
                     const statusColors = {
