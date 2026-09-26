@@ -1065,7 +1065,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-chart-pie text-emerald-400"></i> Calibration Status Breakdown
                         </h4>
                         <div class="chart-box-container">
-                            <canvas id="chart-summary-calib"></canvas>
+                            <canvas id="chart-summary-calib" style="display:block;width:100%;height:100%;"></canvas>
                         </div>
                     </div>
 
@@ -1074,7 +1074,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress
                         </h4>
                         <div class="chart-box-container">
-                            <canvas id="chart-summary-projects"></canvas>
+                            <canvas id="chart-summary-projects" style="display:block;width:100%;height:100%;"></canvas>
                         </div>
                     </div>
 
@@ -1083,7 +1083,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-chart-bar text-amber-400"></i> Downtime Pareto by Line Category
                         </h4>
                         <div class="chart-box-container">
-                            <canvas id="chart-summary-pareto"></canvas>
+                            <canvas id="chart-summary-pareto" style="display:block;width:100%;height:100%;"></canvas>
                         </div>
                         <p class="text-[9px] text-slate-500 text-center">Total downtime hours by Line Category</p>
                     </div>
@@ -1583,7 +1583,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <span id="projects-chart-year-badge" class="text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">Filtered by Year</span>
                     </div>
                     <div class="chart-box-container" style="height: 220px !important; max-height: 220px !important;">
-                        <canvas id="chart-projects-mill"></canvas>
+                        <canvas id="chart-projects-mill" style="display:block;width:100%;height:100%;"></canvas>
                     </div>
                 </div>
 
@@ -2905,11 +2905,17 @@ window.addEventListener("cloudsync:status", (event) => {
                 btn.classList.toggle("hidden", !isPageAllowed(m));
             });
 
-            if (mod === 'summary') renderSummaryModule();
+            if (mod === 'summary') {
+                renderSummaryModule();
+                requestAnimationFrame(() => { if (activeModule === 'summary') renderSummaryModule(); });
+            }
             if (mod === 'calibration') renderCalibModule();
             if (mod === 'uptime') renderDowntimeModule();
             if (mod === 'calendar') renderCalendarModule();
-            if (mod === 'projects') renderProjectsModule();
+            if (mod === 'projects') {
+                renderProjectsModule();
+                requestAnimationFrame(() => { if (activeModule === 'projects') renderProjectsModule(); });
+            }
 
             // Final authority pass protects against any render function changing
             // navigation classes.
@@ -3252,10 +3258,10 @@ window.addEventListener("cloudsync:status", (event) => {
                 : `<div class="text-xs text-slate-500 italic py-2">No project records found for the selected filter.</div>${projectViewAction}`;
 
             // Render summary charts
-            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pCompleted, sortedLinePareto);
+            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto, filteredPr);
         }
 
-        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pCompleted, sortedLinePareto) {
+        function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto, filteredProjects) {
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
@@ -3277,6 +3283,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: false,
+                    transitions: { active: { animation: { duration: 0 } } },
                     cutout: '68%',
                     plugins: {
                         legend: { position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
@@ -3292,28 +3300,36 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             });
 
-            // 2) Project status
+            // 2) Project Distribution & Progress per Mill (Plant)
+            // Same four project-status breakdown used on the Automation Projects page.
             const ctxProj = projCanvas.getContext('2d');
             if (chartSummaryProjects) chartSummaryProjects.destroy();
+            const summaryPlants = ['Plant 1', 'Plant 2', 'PreMix'];
+            const summaryStatusCounts = { 'In Progress': [0,0,0], 'Planning': [0,0,0], 'On Hold': [0,0,0], 'Completed': [0,0,0] };
+            (filteredProjects || []).forEach(pr => {
+                const pi = summaryPlants.indexOf(String(pr.plant || '').trim());
+                if (pi >= 0 && summaryStatusCounts[pr.status]) summaryStatusCounts[pr.status][pi]++;
+            });
             chartSummaryProjects = new Chart(ctxProj, {
                 type: 'bar',
                 data: {
-                    labels: ['In Progress', 'Planning', 'Completed'],
-                    datasets: [{
-                        label: 'Projects',
-                        data: [pInProgress, pPlanning, pCompleted],
-                        backgroundColor: ['#3b82f6', '#eab308', '#22c55e'],
-                        borderRadius: 5,
-                        maxBarThickness: 34
-                    }]
+                    labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
+                    datasets: [
+                        { label: 'In Progress', data: summaryStatusCounts['In Progress'], backgroundColor: '#3b82f6', borderRadius: 3, stack: 'project-status' },
+                        { label: 'Planning', data: summaryStatusCounts['Planning'], backgroundColor: '#eab308', borderRadius: 3, stack: 'project-status' },
+                        { label: 'On Hold', data: summaryStatusCounts['On Hold'], backgroundColor: '#f97316', borderRadius: 3, stack: 'project-status' },
+                        { label: 'Completed', data: summaryStatusCounts['Completed'], backgroundColor: '#22c55e', borderRadius: 3, stack: 'project-status' }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    animation: false,
+                    transitions: { active: { animation: { duration: 0 } } },
+                    plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 9, padding: 7, font: { size: 8 }, color: '#94a3b8' } } },
                     scales: {
-                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51, 65, 85, 0.35)' } }
+                        x: { stacked: true, ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
+                        y: { stacked: true, beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51, 65, 85, 0.35)' } }
                     }
                 }
             });
@@ -4291,13 +4307,31 @@ window.addEventListener("cloudsync:status", (event) => {
 
             container.querySelectorAll(".admin-only").forEach(el => el.classList.toggle("hidden", !isAdminUser()));
 
-            const millMap = { "Plant 1": 0, "Plant 2": 0, "PreMix": 0 };
-            filtered.forEach(pr => { if (millMap[pr.plant] !== undefined) millMap[pr.plant] += 1; });
+            // Project Distribution & Progress per Mill (Plant): show all four statuses.
+            const millPlants = ['Plant 1', 'Plant 2', 'PreMix'];
+            const millStatusCounts = { 'In Progress': [0,0,0], 'Planning': [0,0,0], 'On Hold': [0,0,0], 'Completed': [0,0,0] };
+            filtered.forEach(pr => {
+                const pi = millPlants.indexOf(String(pr.plant || '').trim());
+                if (pi >= 0 && millStatusCounts[pr.status]) millStatusCounts[pr.status][pi]++;
+            });
             const ctxMill = document.getElementById('chart-projects-mill').getContext('2d');
             if (chartProjectsMill) chartProjectsMill.destroy();
             chartProjectsMill = new Chart(ctxMill, {
-                type: 'bar', data: { labels: ['Plant 1', 'Plant 2', 'PreMix Plant'], datasets: [{ label: 'Active Projects', data: [millMap["Plant 1"], millMap["Plant 2"], millMap["PreMix"]], backgroundColor: ['#0284c7', '#0369a1', '#075985'], borderRadius: 8 }] },
-                options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{font:{size:10},color:'#94a3b8'},grid:{display:false}},y:{ticks:{font:{size:10},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,0.4)'}}} }
+                type: 'bar',
+                data: {
+                    labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
+                    datasets: [
+                        { label: 'In Progress', data: millStatusCounts['In Progress'], backgroundColor: '#3b82f6', borderRadius: 4, stack: 'project-status' },
+                        { label: 'Planning', data: millStatusCounts['Planning'], backgroundColor: '#eab308', borderRadius: 4, stack: 'project-status' },
+                        { label: 'On Hold', data: millStatusCounts['On Hold'], backgroundColor: '#f97316', borderRadius: 4, stack: 'project-status' },
+                        { label: 'Completed', data: millStatusCounts['Completed'], backgroundColor: '#22c55e', borderRadius: 4, stack: 'project-status' }
+                    ]
+                },
+                options: {
+                    responsive:true, maintainAspectRatio:false, animation:false,
+                    plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,padding:8,font:{size:9},color:'#94a3b8'}}},
+                    scales:{x:{stacked:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{display:false}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,0.4)'}}}
+                }
             });
         }
 
