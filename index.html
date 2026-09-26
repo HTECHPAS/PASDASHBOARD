@@ -3185,63 +3185,63 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            // Supporting details breakdown lists
-            const calibSupp = document.getElementById("summary-per-plant-calib");
-            const scheduledTotal = Math.max(0, filteredEq.length - cNa);
-            const donePct = scheduledTotal ? ((cDone / scheduledTotal) * 100).toFixed(1) : '0.0';
-            const allSummaryPlants = ["Plant 1", "Plant 2", "PreMix"];
-            const plantNames = allSummaryPlants.filter(plant => currentPlant === "ALL" || currentPlant === plant);
+            // Supporting details: always show all configured plants, including plants with zero records.
+            // The existing Summary plant filter still applies to the values, so selecting a plant
+            // shows that plant's data while the other plant rows remain visible with zeroes.
+            const summaryPlants = ["Plant 1", "Plant 2", "PreMix"];
+            const normalizePlant = value => {
+                const v = String(value || "").trim().toLowerCase();
+                if (v === "premix" || v === "premix plant" || v === "pre-mix") return "PreMix";
+                if (v === "plant 1") return "Plant 1";
+                if (v === "plant 2") return "Plant 2";
+                return String(value || "").trim();
+            };
 
             const calibByPlant = {};
+            summaryPlants.forEach(p => calibByPlant[p] = { done: 0, scheduled: 0 });
             filteredEq.forEach(eq => {
-                const plant = String(eq.plant || "Unassigned Plant").trim();
-                if (!calibByPlant[plant]) calibByPlant[plant] = { done: 0, scheduled: 0 };
+                const plant = normalizePlant(eq.plant);
+                if (!calibByPlant[plant]) return;
                 const st = getCalibStatus(eq);
                 if (st !== "NO CALIB SCHED") calibByPlant[plant].scheduled++;
                 if (st === "DONE") calibByPlant[plant].done++;
             });
 
-            calibSupp.innerHTML = plantNames.length ? `
+            const calibSupp = document.getElementById("summary-per-plant-calib");
+            calibSupp.innerHTML = `
                 <div class="overflow-x-auto">
                     <table class="w-full text-xs border-collapse">
                         <thead>
                             <tr class="border-b border-slate-700/60 text-slate-400">
-                                <th class="text-left px-3 py-2 font-semibold">Plant</th>
-                                <th class="text-center px-3 py-2 font-semibold">Done</th>
-                                <th class="text-center px-3 py-2 font-semibold">Scheduled Instruments</th>
-                                <th class="text-center px-3 py-2 font-semibold">Percent</th>
+                                <th class="text-left px-2 py-1.5 font-semibold">Plant</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">Done</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">Scheduled Instruments</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">Percent</th>
                             </tr>
                         </thead>
-                        <tbody>${plantNames.map(plant => {
-                            const v = calibByPlant[plant] || { done: 0, scheduled: 0 };
-                            const pct = v.scheduled ? ((v.done / v.scheduled) * 100).toFixed(1) : "0.0";
-                            return `<tr class="border-b border-slate-700/40 last:border-0">
-                                <td class="px-3 py-2 font-bold text-white">${escapeHtml(plant)}</td>
-                                <td class="px-3 py-2 text-center font-bold text-emerald-400">${v.done}</td>
-                                <td class="px-3 py-2 text-center text-slate-300">${v.scheduled}</td>
-                                <td class="px-3 py-2 text-center font-semibold text-blue-300">${pct}%</td>
-                            </tr>`;
-                        }).join("")}</tbody>
+                        <tbody>
+                            ${summaryPlants.map(plant => {
+                                const v = calibByPlant[plant];
+                                const pct = v.scheduled ? ((v.done / v.scheduled) * 100).toFixed(1) : "0.0";
+                                return `<tr class="border-b border-slate-700/40 last:border-0">
+                                    <td class="px-2 py-1.5 font-bold text-white">${escapeHtml(plant)}</td>
+                                    <td class="px-2 py-1.5 text-center font-bold text-emerald-400">${v.done}</td>
+                                    <td class="px-2 py-1.5 text-center text-slate-300">${v.scheduled}</td>
+                                    <td class="px-2 py-1.5 text-center font-semibold text-blue-300">${pct}%</td>
+                                </tr>`;
+                            }).join("")}
+                        </tbody>
                     </table>
-                </div>` : `<div class="text-xs text-slate-500 italic py-2">No calibration records found.</div>`;
+                </div>`;
 
-            let pInProgress = 0, pPlanning = 0, pOnHold = 0, pCompleted = 0;
-            filteredPr.forEach(pr => {
-                const status = String(pr.status || "").trim();
-                if (status === "In Progress") pInProgress++;
-                else if (status === "Planning") pPlanning++;
-                else if (status === "On Hold") pOnHold++;
-                else if (status === "Completed") pCompleted++;
-            });
-
-            const projSupp = document.getElementById("summary-per-plant-projects");
-            const projectViewAction = isPageAllowed("projects")
-                ? `<button type="button" onclick="openProjectsFromSummary()" class="mt-2 w-full px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/15 text-[10px] font-semibold transition"><i class="fa-solid fa-folder-open mr-1"></i> View Projects</button>`
-                : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
+            // Project status by plant — same data structure as Project Distribution & Progress per Mill.
             const projectByPlant = {};
+            summaryPlants.forEach(p => projectByPlant[p] = {
+                inProgress: 0, planning: 0, onHold: 0, completed: 0
+            });
             filteredPr.forEach(pr => {
-                const plant = String(pr.plant || "Unassigned Plant").trim();
-                if (!projectByPlant[plant]) projectByPlant[plant] = { inProgress: 0, planning: 0, onHold: 0, completed: 0 };
+                const plant = normalizePlant(pr.plant);
+                if (!projectByPlant[plant]) return;
                 const status = String(pr.status || "").trim();
                 if (status === "In Progress") projectByPlant[plant].inProgress++;
                 else if (status === "Planning") projectByPlant[plant].planning++;
@@ -3249,76 +3249,47 @@ window.addEventListener("cloudsync:status", (event) => {
                 else if (status === "Completed") projectByPlant[plant].completed++;
             });
 
-            projSupp.innerHTML = plantNames.length ? `
+            const pInProgress = summaryPlants.reduce((n,p) => n + projectByPlant[p].inProgress, 0);
+            const pPlanning = summaryPlants.reduce((n,p) => n + projectByPlant[p].planning, 0);
+            const pOnHold = summaryPlants.reduce((n,p) => n + projectByPlant[p].onHold, 0);
+            const pCompleted = summaryPlants.reduce((n,p) => n + projectByPlant[p].completed, 0);
+
+            const projSupp = document.getElementById("summary-per-plant-projects");
+            const projectViewAction = isPageAllowed("projects")
+                ? `<button type="button" onclick="openProjectsFromSummary()" class="mt-2 w-full px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/15 text-[10px] font-semibold transition"><i class="fa-solid fa-folder-open mr-1"></i> View Projects</button>`
+                : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
+            projSupp.innerHTML = `
                 <div class="overflow-x-auto">
                     <table class="w-full text-xs border-collapse">
                         <thead>
                             <tr class="border-b border-slate-700/60 text-slate-400">
-                                <th class="text-left px-3 py-2 font-semibold">Plant</th>
-                                <th class="text-center px-3 py-2 font-semibold">Progress</th>
-                                <th class="text-center px-3 py-2 font-semibold">Planning</th>
-                                <th class="text-center px-3 py-2 font-semibold">On Hold</th>
-                                <th class="text-center px-3 py-2 font-semibold">Completed</th>
+                                <th class="text-left px-2 py-1.5 font-semibold">Plant</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">Progress</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">Planning</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">On Hold</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">Completed</th>
                             </tr>
                         </thead>
-                        <tbody>${plantNames.map(plant => {
-                            const v = projectByPlant[plant] || { inProgress: 0, planning: 0, onHold: 0, completed: 0 };
-                            return `<tr class="border-b border-slate-700/40 last:border-0">
-                                <td class="px-3 py-2 font-bold text-white">${escapeHtml(plant)}</td>
-                                <td class="px-3 py-2 text-center font-bold text-blue-400">${v.inProgress}</td>
-                                <td class="px-3 py-2 text-center font-bold text-amber-400">${v.planning}</td>
-                                <td class="px-3 py-2 text-center font-bold text-orange-400">${v.onHold}</td>
-                                <td class="px-3 py-2 text-center font-bold text-emerald-400">${v.completed}</td>
-                            </tr>`;
-                        }).join("")}</tbody>
+                        <tbody>
+                            ${summaryPlants.map(plant => {
+                                const v = projectByPlant[plant];
+                                return `<tr class="border-b border-slate-700/40 last:border-0">
+                                    <td class="px-2 py-1.5 font-bold text-white">${escapeHtml(plant)}</td>
+                                    <td class="px-2 py-1.5 text-center font-bold text-blue-400">${v.inProgress}</td>
+                                    <td class="px-2 py-1.5 text-center font-bold text-amber-400">${v.planning}</td>
+                                    <td class="px-2 py-1.5 text-center font-bold text-red-400">${v.onHold}</td>
+                                    <td class="px-2 py-1.5 text-center font-bold text-emerald-400">${v.completed}</td>
+                                </tr>`;
+                            }).join("")}
+                        </tbody>
                     </table>
-                </div>${projectViewAction}` : `<div class="text-xs text-slate-500 italic py-2">No project records found.</div>${projectViewAction}`;
+                </div>
+                ${projectViewAction}
+            `;
 
-            // Render summary charts
-            // Project Status & Progress: same plant-by-status stacked-bar logic used by
-            // Automation Projects > Project Distribution & Progress per Mill (Plant).
-            const summaryPlants = ["Plant 1", "Plant 2", "PreMix"];
-            const summaryStatusCounts = {
-                "In Progress": summaryPlants.map(() => 0),
-                "Planning": summaryPlants.map(() => 0),
-                "On Hold": summaryPlants.map(() => 0),
-                "Completed": summaryPlants.map(() => 0)
-            };
-            filteredPr.forEach(pr => {
-                const pi = summaryPlants.indexOf(String(pr.plant || "").trim());
-                if (pi < 0) return;
-                const status = String(pr.status || "Planning").trim();
-                if (summaryStatusCounts[status]) summaryStatusCounts[status][pi] += 1;
-            });
-            const summaryProjectCanvas = document.getElementById("chart-summary-projects");
-            if (summaryProjectCanvas && typeof Chart !== "undefined") {
-                const ctxSummaryProjects = summaryProjectCanvas.getContext("2d");
-                if (window.chartSummaryProjects) window.chartSummaryProjects.destroy();
-                window.chartSummaryProjects = new Chart(ctxSummaryProjects, {
-                    type: "bar",
-                    data: {
-                        labels: ["Plant 1", "Plant 2", "PreMix Plant"],
-                        datasets: [
-                            { label: "In Progress", data: summaryStatusCounts["In Progress"], backgroundColor: "#3b82f6", borderRadius: 4 },
-                            { label: "Planning", data: summaryStatusCounts["Planning"], backgroundColor: "#eab308", borderRadius: 4 },
-                            { label: "On Hold", data: summaryStatusCounts["On Hold"], backgroundColor: "#ef4444", borderRadius: 4 },
-                            { label: "Completed", data: summaryStatusCounts["Completed"], backgroundColor: "#22c55e", borderRadius: 4 }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        animation: false,
-                        plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 10 } } } },
-                        scales: {
-                            x: { stacked: true, ticks: { color: "#94a3b8", font: { size: 10 } }, grid: { display: false } },
-                            y: { stacked: true, beginAtZero: true, ticks: { color: "#94a3b8", stepSize: 1 }, grid: { color: "rgba(148,163,184,0.08)" } }
-                        }
-                    }
-                });
-            }
-
-            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto);
+            // Render summary charts. Project chart receives the same per-plant status counts
+            // used by the Automation Projects "Project Distribution & Progress per Mill" chart.
+            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), projectByPlant, sortedLinePareto);
         }
 
         function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto) {
@@ -3358,28 +3329,49 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             });
 
-            // 2) Project status
+            // 2) Project Status & Progress — same stacked per-plant structure as
+            // Automation Projects > Project Distribution & Progress per Mill (Plant).
             const ctxProj = projCanvas.getContext('2d');
             if (chartSummaryProjects) chartSummaryProjects.destroy();
+
+            const summaryPlants = ["Plant 1", "Plant 2", "PreMix"];
+            const getSeries = key => summaryPlants.map(p => Number(projectByPlant?.[p]?.[key] || 0));
+
             chartSummaryProjects = new Chart(ctxProj, {
                 type: 'bar',
                 data: {
-                    labels: ['In Progress', 'Planning', 'On Hold', 'Completed'],
-                    datasets: [{
-                        label: 'Projects',
-                        data: [pInProgress, pPlanning, pOnHold, pCompleted],
-                        backgroundColor: ['#3b82f6', '#eab308', '#ef4444', '#22c55e'],
-                        borderRadius: 5,
-                        maxBarThickness: 34
-                    }]
+                    labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
+                    datasets: [
+                        { label: 'In Progress', data: getSeries('inProgress'), backgroundColor: '#3b82f6', borderRadius: 4 },
+                        { label: 'Planning', data: getSeries('planning'), backgroundColor: '#eab308', borderRadius: 4 },
+                        { label: 'On Hold', data: getSeries('onHold'), backgroundColor: '#ef4444', borderRadius: 4 },
+                        { label: 'Completed', data: getSeries('completed'), backgroundColor: '#22c55e', borderRadius: 4 }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    animation: { duration: 250 },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' }
+                        },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
                     scales: {
-                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51, 65, 85, 0.35)' } }
+                        x: {
+                            stacked: true,
+                            ticks: { font: { size: 10 }, color: '#94a3b8' },
+                            grid: { display: false }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: { font: { size: 9 }, color: '#94a3b8', stepSize: 1 },
+                            grid: { color: 'rgba(51,65,85,0.35)' }
+                        }
                     }
                 }
             });
@@ -4373,7 +4365,7 @@ window.addEventListener("cloudsync:status", (event) => {
             // Project Distribution & Progress per Mill: one stacked bar per plant,
             // split by the actual project status. This stays synchronized with the
             // same filtered project records used by the cards above.
-            const plants = ["Plant 1", "Plant 2", "PreMix"].filter(plant => currentPlant === "ALL" || currentPlant === plant);
+            const plants = ["Plant 1", "Plant 2", "PreMix"];
             const statusCounts = {
                 "In Progress": plants.map(() => 0),
                 "Planning": plants.map(() => 0),
