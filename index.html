@@ -3259,13 +3259,57 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Render summary charts
             renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto, filteredPr);
+            requestAnimationFrame(() => renderExecutiveProjectPlantChart(filteredPr));
+        }
+
+        function renderExecutiveProjectPlantChart(filteredProjects) {
+            const canvas = document.getElementById('chart-summary-projects');
+            if (!canvas) return;
+            if (typeof Chart === 'undefined') {
+                setTimeout(() => renderExecutiveProjectPlantChart(filteredProjects), 300);
+                return;
+            }
+            const parent = canvas.parentElement;
+            if (parent) {
+                parent.style.height = '145px';
+                parent.style.minHeight = '145px';
+                parent.style.position = 'relative';
+            }
+            canvas.style.display = 'block';
+            canvas.style.width = '100%';
+            canvas.style.height = '145px';
+            canvas.width = Math.max(300, parent ? parent.clientWidth : 300);
+            canvas.height = 145;
+            if (chartSummaryProjects) { chartSummaryProjects.destroy(); chartSummaryProjects = null; }
+
+            const plants = ['Plant 1', 'Plant 2', 'PreMix'];
+            const counts = { 'In Progress':[0,0,0], 'Planning':[0,0,0], 'On Hold':[0,0,0], 'Completed':[0,0,0] };
+            (Array.isArray(filteredProjects) ? filteredProjects : []).forEach(pr => {
+                const pi = plants.indexOf(String(pr.plant || '').trim());
+                const status = String(pr.status || '').trim();
+                if (pi >= 0 && counts[status]) counts[status][pi]++;
+            });
+            chartSummaryProjects = new Chart(canvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
+                    datasets: [
+                        {label:'In Progress',data:counts['In Progress'],backgroundColor:'#3b82f6',stack:'project-status',borderRadius:3},
+                        {label:'Planning',data:counts['Planning'],backgroundColor:'#eab308',stack:'project-status',borderRadius:3},
+                        {label:'On Hold',data:counts['On Hold'],backgroundColor:'#f97316',stack:'project-status',borderRadius:3},
+                        {label:'Completed',data:counts['Completed'],backgroundColor:'#22c55e',stack:'project-status',borderRadius:3}
+                    ]
+                },
+                options: {responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:9,padding:6,font:{size:8},color:'#94a3b8'}}},scales:{x:{stacked:true,ticks:{font:{size:9},color:'#94a3b8'},grid:{display:false}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:9},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,0.35)'}}}}
+            });
         }
 
         function renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto, filteredProjects) {
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
-            if (!calibCanvas || !projCanvas || !paretoCanvas || typeof Chart === 'undefined') return;
+            if (typeof Chart === 'undefined') { setTimeout(() => renderSummaryCharts(cDone, cRemaining, pInProgress, pPlanning, pOnHold, pCompleted, sortedLinePareto, filteredProjects), 300); return; }
+            if (!calibCanvas || !paretoCanvas) return;
 
             // 1) Calibration completion — no overdue categories.
             const ctxCalib = calibCanvas.getContext('2d');
@@ -3301,38 +3345,7 @@ window.addEventListener("cloudsync:status", (event) => {
             });
 
             // 2) Project Distribution & Progress per Mill (Plant)
-            // Same four project-status breakdown used on the Automation Projects page.
-            const ctxProj = projCanvas.getContext('2d');
-            if (chartSummaryProjects) chartSummaryProjects.destroy();
-            const summaryPlants = ['Plant 1', 'Plant 2', 'PreMix'];
-            const summaryStatusCounts = { 'In Progress': [0,0,0], 'Planning': [0,0,0], 'On Hold': [0,0,0], 'Completed': [0,0,0] };
-            (filteredProjects || []).forEach(pr => {
-                const pi = summaryPlants.indexOf(String(pr.plant || '').trim());
-                if (pi >= 0 && summaryStatusCounts[pr.status]) summaryStatusCounts[pr.status][pi]++;
-            });
-            chartSummaryProjects = new Chart(ctxProj, {
-                type: 'bar',
-                data: {
-                    labels: ['Plant 1', 'Plant 2', 'PreMix Plant'],
-                    datasets: [
-                        { label: 'In Progress', data: summaryStatusCounts['In Progress'], backgroundColor: '#3b82f6', borderRadius: 3, stack: 'project-status' },
-                        { label: 'Planning', data: summaryStatusCounts['Planning'], backgroundColor: '#eab308', borderRadius: 3, stack: 'project-status' },
-                        { label: 'On Hold', data: summaryStatusCounts['On Hold'], backgroundColor: '#f97316', borderRadius: 3, stack: 'project-status' },
-                        { label: 'Completed', data: summaryStatusCounts['Completed'], backgroundColor: '#22c55e', borderRadius: 3, stack: 'project-status' }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
-                    transitions: { active: { animation: { duration: 0 } } },
-                    plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 9, padding: 7, font: { size: 8 }, color: '#94a3b8' } } },
-                    scales: {
-                        x: { stacked: true, ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { stacked: true, beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51, 65, 85, 0.35)' } }
-                    }
-                }
-            });
+            renderExecutiveProjectPlantChart(filteredProjects);
 
             // 3) Pareto: total downtime by Line Category
             const ctxPareto = paretoCanvas.getContext('2d');
