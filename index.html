@@ -3106,12 +3106,14 @@ window.addEventListener("cloudsync:status", (event) => {
                 return checkDateMatchFilter(pr.date, fType, yearVal, monthVal);
             });
 
-            // Calculate Calib KPIs
+            // Calibration KPI logic for Executive Summary:
+            // DONE and OVERDUE, DONE are one completed group. N/A / NO CALIB SCHED
+            // are excluded from the scheduled denominator.
             let cDone = 0, cOverdue = 0, cOverdueDone = 0, cPending = 0, cStsok = 0, cNa = 0;
             filteredEq.forEach(eq => {
                 const st = getCalibStatus(eq);
                 if (st === "DONE") cDone++;
-                else if (st === "OVERDUE, DONE") cOverdueDone++;
+                else if (st === "OVERDUE, DONE") { cOverdueDone++; cDone++; }
                 else if (st === "OVERDUE") cOverdue++;
                 else if (st === "PENDING") cPending++;
                 else if (st === "STSOK") cStsok++;
@@ -3195,19 +3197,32 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            // Supporting details: always show all configured plants, including plants with zero records.
-            // The existing Summary plant filter still applies to the values, so selecting a plant
-            // shows that plant's data while the other plant rows remain visible with zeroes.
-            const summaryPlants = ["Plant 1", "Plant 2", "PreMix"];
+            // Supporting details follow the MAIN Executive Summary plant filter only.
+            // If a plant is selected, only that plant's row is shown.
+            const allSummaryPlants = ["Plant 1", "Plant 2", "PreMix"];
+            const summaryPlants = currentPlant === "ALL"
+                ? allSummaryPlants
+                : allSummaryPlants.filter(p => normalizePlant(p) === normalizePlant(currentPlant));
 
             const calibByPlant = {};
-            summaryPlants.forEach(p => calibByPlant[p] = { done: 0, scheduled: 0 });
+            allSummaryPlants.forEach(p => calibByPlant[p] = { extScheduled: 0, extDone: 0, intScheduled: 0, intDone: 0, scheduled: 0, done: 0 });
             filteredEq.forEach(eq => {
                 const plant = normalizePlant(eq.plant);
                 if (!calibByPlant[plant]) return;
                 const st = getCalibStatus(eq);
+                const completed = st === "DONE" || st === "OVERDUE, DONE";
+                const extScheduled = !!String(eq.extSched || "").trim();
+                const intScheduled = !!String(eq.intSched || "").trim();
+                if (extScheduled) {
+                    calibByPlant[plant].extScheduled++;
+                    if (completed && String(eq.extCalib || "").trim()) calibByPlant[plant].extDone++;
+                }
+                if (intScheduled) {
+                    calibByPlant[plant].intScheduled++;
+                    if (completed && String(eq.intCalib || "").trim()) calibByPlant[plant].intDone++;
+                }
                 if (st !== "NO CALIB SCHED") calibByPlant[plant].scheduled++;
-                if (st === "DONE") calibByPlant[plant].done++;
+                if (completed) calibByPlant[plant].done++;
             });
 
             const calibSupp = document.getElementById("summary-per-plant-calib");
@@ -3217,9 +3232,11 @@ window.addEventListener("cloudsync:status", (event) => {
                         <thead>
                             <tr class="border-b border-slate-700/60 text-slate-400">
                                 <th class="text-left px-2 py-1.5 font-semibold">Plant</th>
-                                <th class="text-center px-2 py-1.5 font-semibold">Done</th>
-                                <th class="text-center px-2 py-1.5 font-semibold">Scheduled Instruments</th>
-                                <th class="text-center px-2 py-1.5 font-semibold">Percent</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">External Done</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">External Scheduled</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">Internal Done</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">Internal Scheduled</th>
+                                <th class="text-center px-2 py-1.5 font-semibold">Overall %</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -3228,9 +3245,11 @@ window.addEventListener("cloudsync:status", (event) => {
                                 const pct = v.scheduled ? ((v.done / v.scheduled) * 100).toFixed(1) : "0.0";
                                 return `<tr class="border-b border-slate-700/40 last:border-0">
                                     <td class="px-2 py-1.5 font-bold text-white">${escapeHtml(plant)}</td>
-                                    <td class="px-2 py-1.5 text-center font-bold text-emerald-400">${v.done}</td>
-                                    <td class="px-2 py-1.5 text-center text-slate-300">${v.scheduled}</td>
-                                    <td class="px-2 py-1.5 text-center font-semibold text-blue-300">${pct}%</td>
+                                    <td class="px-2 py-1.5 text-center font-bold text-blue-300">${v.extDone}</td>
+                                    <td class="px-2 py-1.5 text-center text-slate-300">${v.extScheduled}</td>
+                                    <td class="px-2 py-1.5 text-center font-bold text-purple-300">${v.intDone}</td>
+                                    <td class="px-2 py-1.5 text-center text-slate-300">${v.intScheduled}</td>
+                                    <td class="px-2 py-1.5 text-center font-semibold text-emerald-300">${pct}%</td>
                                 </tr>`;
                             }).join("")}
                         </tbody>
@@ -3292,7 +3311,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Render summary charts. Project chart receives the same per-plant status counts
             // used by the Automation Projects "Project Distribution & Progress per Mill" chart.
-            renderSummaryCharts(cDone, Math.max(0, (filteredEq.length - cNa) - cDone), projectByPlant, sortedLinePareto, currentPlant);
+            renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, sortedLinePareto, currentPlant);
         }
 
         function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant) {
