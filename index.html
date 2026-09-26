@@ -1133,6 +1133,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-list-check text-emerald-400"></i> Calibration Status Supporting Details
                         </h4>
                         <div id="summary-per-plant-calib" class="space-y-2 pt-2"></div>
+                        <div id="summary-calib-comparison-details" class="hidden mt-2 pt-2 border-t border-slate-700/50"></div>
                     </div>
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-2.5 rounded-xl space-y-2">
@@ -1140,6 +1141,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-list-check text-blue-400"></i> Project Status Supporting Details
                         </h4>
                         <div id="summary-per-plant-projects" class="space-y-2 pt-2"></div>
+                        <div id="summary-project-comparison-details" class="hidden mt-2 pt-2 border-t border-slate-700/50"></div>
                     </div>
                 </div>
 
@@ -1157,17 +1159,27 @@ window.addEventListener("cloudsync:status", (event) => {
                                 <div class="bg-slate-900/60 border border-slate-700/50 p-2.5 rounded-xl">
                                     <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Area Downtime</span>
                                     <p id="summary-dt-hours" class="text-xl font-black text-red-400 mt-0.5">0 hrs</p>
+                                    <p id="summary-dt-hours-compare" class="hidden text-[10px] text-blue-300 mt-1"></p>
                                     <p class="text-[10px] text-slate-500 mt-0.5">Cumulative outage duration</p>
                                 </div>
                                 <div class="bg-slate-900/60 border border-slate-700/50 p-2.5 rounded-xl">
                                     <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">MTBF</span>
                                     <p id="summary-dt-mtbf" class="text-xl font-black text-blue-400 mt-0.5">0 hrs</p>
+                                    <p id="summary-dt-mtbf-compare" class="hidden text-[10px] text-blue-300 mt-1"></p>
                                     <p class="text-[10px] text-slate-500 mt-0.5">Average operational interval</p>
                                 </div>
                                 <div class="bg-slate-900/60 border border-slate-700/50 p-2.5 rounded-xl">
                                     <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">MTTR</span>
                                     <p id="summary-dt-mttr" class="text-xl font-black text-amber-400 mt-0.5">0 mins</p>
+                                    <p id="summary-dt-mttr-compare" class="hidden text-[10px] text-amber-300 mt-1"></p>
                                     <p class="text-[10px] text-slate-500 mt-0.5">Average resolution response time</p>
+                                </div>
+                            </div>
+                            <div id="summary-reliability-comparison" class="hidden bg-slate-900/50 border border-slate-700/50 rounded-xl p-2.5">
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">System Reliability Comparison</div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                    <div id="summary-reliability-primary" class="text-slate-300"></div>
+                                    <div id="summary-reliability-compare" class="text-slate-300"></div>
                                 </div>
                             </div>
 
@@ -1180,9 +1192,12 @@ window.addEventListener("cloudsync:status", (event) => {
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                             <tr>
                                                 <th class="py-1.5 px-2">Line Category</th>
-                                                <th class="py-2.5 px-3">Equipment</th>
-                                                <th class="py-2.5 px-3">Failure Category</th>
-                                                <th class="py-2.5 px-3 text-center">Total Time</th>
+                                                <th class="py-2.5 px-3">Date 1 — Equipment</th>
+                                                <th class="py-2.5 px-3">Date 1 — Failure</th>
+                                                <th class="py-2.5 px-3 text-center">Date 1 — Time</th>
+                                                <th class="py-2.5 px-3">Date 2 — Equipment</th>
+                                                <th class="py-2.5 px-3">Date 2 — Failure</th>
+                                                <th class="py-2.5 px-3 text-center">Date 2 — Time</th>
                                             </tr>
                                         </thead>
                                         <tbody id="summary-top5-downtime-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
@@ -3226,8 +3241,19 @@ window.addEventListener("cloudsync:status", (event) => {
             const mttr = filteredDt.length > 0 ? Math.round((primaryDown.hrs / filteredDt.length) * 60) : 0;
             document.getElementById("summary-dt-mtbf").innerText = `${mtbf} hrs`;
             document.getElementById("summary-dt-mttr").innerText = `${mttr} mins`;
+            const compareMtbf = comparisonDt.length > 0 ? (720 / comparisonDt.length).toFixed(1) : "0";
+            const compareMttr = comparisonDt.length > 0 ? Math.round((compareDown.hrs / comparisonDt.length) * 60) : 0;
 
             const setCompare = (id, html, show) => { const el=document.getElementById(id); if(!el)return; el.innerHTML=html; el.classList.toggle('hidden',!show); };
+            setCompare('summary-dt-hours-compare', isCompare ? `${compareValue || 'Date 2'}: ${compareDown.hrs.toFixed(1)} hrs` : '', isCompare);
+            setCompare('summary-dt-mtbf-compare', isCompare ? `${compareValue || 'Date 2'}: ${compareMtbf} hrs` : '', isCompare);
+            setCompare('summary-dt-mttr-compare', isCompare ? `${compareValue || 'Date 2'}: ${compareMttr} mins` : '', isCompare);
+            setCompare('summary-reliability-comparison', isCompare ? '' : '', isCompare);
+            const relPrimary=document.getElementById('summary-reliability-primary'), relCompare=document.getElementById('summary-reliability-compare');
+            if(isCompare){
+                if(relPrimary) relPrimary.innerHTML=`<strong class="text-amber-300">${escapeHtml(primaryValue || 'Date 1')}</strong><br>Downtime: <strong>${primaryDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${mtbf} hrs</strong> · MTTR: <strong>${mttr} mins</strong> · Uptime: <strong>${primaryDown.uptime}%</strong>`;
+                if(relCompare) relCompare.innerHTML=`<strong class="text-blue-300">${escapeHtml(compareValue || 'Date 2')}</strong><br>Downtime: <strong>${compareDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${compareMtbf} hrs</strong> · MTTR: <strong>${compareMttr} mins</strong> · Uptime: <strong>${compareDown.uptime}%</strong>`;
+            }
             setCompare('summary-availability-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
             setCompare('summary-uptime-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
             setCompare('summary-calib-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryCalib.compliance}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareCalib.compliance}%` : '', isCompare);
@@ -3273,19 +3299,42 @@ window.addEventListener("cloudsync:status", (event) => {
                 Object.values(group).sort((a,b) => b.duration - a.duration)[0]
             ).filter(Boolean).sort((a,b) => b.duration - a.duration);
 
+            const buildTopEquipmentByLine = logs => {
+                const map = {};
+                (logs || []).forEach(dt => {
+                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
+                    if (!map[line]) map[line] = {};
+                    const key = `${equipment}|||${category}`;
+                    if (!map[line][key]) map[line][key] = { line, equipment, category, duration: 0 };
+                    map[line][key].duration += dur;
+                });
+                return Object.values(map).map(group => Object.values(group).sort((a,b)=>b.duration-a.duration)[0]).filter(Boolean).sort((a,b)=>b.duration-a.duration);
+            };
+            const primaryTopByLine = buildTopEquipmentByLine(filteredDt);
+            const compareTopByLine = isCompare ? buildTopEquipmentByLine(comparisonDt) : [];
+            const compareByLine = Object.fromEntries(compareTopByLine.map(x => [x.line, x]));
             const top5Body = document.getElementById("summary-top5-downtime-body");
             top5Body.innerHTML = "";
-            if (topEquipmentByLine.length === 0) {
-                top5Body.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-slate-500 italic">No downtime records found for this period.</td></tr>`;
+            if (primaryTopByLine.length === 0 && compareTopByLine.length === 0) {
+                top5Body.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-slate-500 italic">No downtime records found for the selected period(s).</td></tr>`;
             } else {
-                topEquipmentByLine.forEach(item => {
+                const lines = [...new Set([...primaryTopByLine.map(x=>x.line), ...compareTopByLine.map(x=>x.line)])];
+                lines.forEach(line => {
+                    const a = primaryTopByLine.find(x=>x.line===line) || null;
+                    const b = compareByLine[line] || null;
                     const tr = document.createElement("tr");
-                    tr.className = "hover:bg-slate-800/50 transition";
+                    tr.className = "hover:bg-slate-800/50 transition align-top";
                     tr.innerHTML = `
-                        <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(item.line)}</td>
-                        <td class="py-2.5 px-3 text-slate-200">${escapeHtml(item.equipment)}</td>
-                        <td class="py-2.5 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category)}</span></td>
-                        <td class="py-2.5 px-3 text-center text-red-400 font-bold">${item.duration.toFixed(1)} hrs</td>
+                        <td class="py-2 px-2 font-semibold text-white">${escapeHtml(line)}</td>
+                        <td class="py-2 px-3 text-slate-200">${escapeHtml(a?.equipment || '—')}</td>
+                        <td class="py-2 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(a?.category || '—')}</span></td>
+                        <td class="py-2 px-3 text-center text-red-400 font-bold">${a ? a.duration.toFixed(1)+' hrs' : '—'}</td>
+                        <td class="py-2 px-3 text-slate-200">${escapeHtml(b?.equipment || '—')}</td>
+                        <td class="py-2 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(b?.category || '—')}</span></td>
+                        <td class="py-2 px-3 text-center text-blue-300 font-bold">${b ? b.duration.toFixed(1)+' hrs' : '—'}</td>
                     `;
                     top5Body.appendChild(tr);
                 });
@@ -3325,22 +3374,25 @@ window.addEventListener("cloudsync:status", (event) => {
                 if (Object.prototype.hasOwnProperty.call(projectByPlant[plant], status)) projectByPlant[plant][status]++;
             });
 
+            const compareCalibByPlant = {};
+            allSummaryPlants.forEach(p => compareCalibByPlant[p] = {done:0, scheduled:0});
+            comparisonEq.forEach(eq => {
+                const plant = normalizePlant(eq.plant); if (!compareCalibByPlant[plant]) return;
+                [getSubCalibStatus(eq.extSched, eq.extCalib), getSubCalibStatus(eq.intSched, eq.intCalib)].forEach(st => {
+                    if(st === 'NA') return;
+                    compareCalibByPlant[plant].scheduled++;
+                    if(st === 'DONE' || st === 'OVERDUE, DONE') compareCalibByPlant[plant].done++;
+                });
+            });
             const calibSupp = document.getElementById("summary-per-plant-calib");
-            calibSupp.innerHTML = `
-                <div class="grid grid-cols-4 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
-                    <span>Plant</span><span class="text-center">Done</span><span class="text-center">Scheduled Instruments</span><span class="text-center">Percent</span>
+            calibSupp.innerHTML = isCompare ? `
+                <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryValue || 'Date 1')} vs ${escapeHtml(compareValue || 'Date 2')}</div>
+                <div class="grid grid-cols-5 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
+                    <span>Plant</span><span>Period</span><span class="text-center">Done</span><span class="text-center">Scheduled</span><span class="text-center">Percent</span>
                 </div>
-                ${summaryPlants.map(p => {
-                    const d = calibByPlant[p]?.done || 0;
-                    const sch = calibByPlant[p]?.scheduled || 0;
-                    const pct = sch ? ((d / sch) * 100).toFixed(0) : "0";
-                    return `<div class="grid grid-cols-4 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0">
-                        <span class="font-semibold text-white">${escapeHtml(p)}</span>
-                        <strong class="text-center text-emerald-400">${d}</strong>
-                        <span class="text-center text-slate-300">${sch}</span>
-                        <span class="text-center text-blue-300">${pct}%</span>
-                    </div>`;
-                }).join("") || `<div class="text-xs text-slate-500 italic">No plant selected.</div>`}`;
+                ${summaryPlants.map(p => { const a=calibByPlant[p]||{}; const b=compareCalibByPlant[p]||{}; const ap=a.scheduled?((a.done/a.scheduled)*100).toFixed(0):'0'; const bp=b.scheduled?((b.done/b.scheduled)*100).toFixed(0):'0'; return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-5 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryValue || 'Date 1')}</span><strong class="text-center text-emerald-400">${a.done||0}</strong><span class="text-center text-slate-300">${a.scheduled||0}</span><span class="text-center text-blue-300">${ap}%</span></div><div class="grid grid-cols-5 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareValue || 'Date 2')}</span><strong class="text-center text-emerald-300">${b.done||0}</strong><span class="text-center text-slate-300">${b.scheduled||0}</span><span class="text-center text-cyan-300">${bp}%</span></div></div>`; }).join('')}` : `
+                <div class="grid grid-cols-4 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span class="text-center">Done</span><span class="text-center">Scheduled Instruments</span><span class="text-center">Percent</span></div>
+                ${summaryPlants.map(p => { const d=calibByPlant[p]?.done||0; const sch=calibByPlant[p]?.scheduled||0; const pct=sch?((d/sch)*100).toFixed(0):'0'; return `<div class="grid grid-cols-4 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0"><span class="font-semibold text-white">${escapeHtml(p)}</span><strong class="text-center text-emerald-400">${d}</strong><span class="text-center text-slate-300">${sch}</span><span class="text-center text-blue-300">${pct}%</span></div>`; }).join('')}`;
 
             const pInProgress = filteredPr.filter(pr => String(pr.status || "").trim() === "In Progress").length;
             const pPlanning = filteredPr.filter(pr => String(pr.status || "").trim() === "Planning").length;
@@ -3351,21 +3403,20 @@ window.addEventListener("cloudsync:status", (event) => {
             const projectViewAction = isPageAllowed("projects")
                 ? `<button type="button" onclick="openProjectsFromSummary()" class="mt-2 w-full px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/15 text-[10px] font-semibold transition"><i class="fa-solid fa-folder-open mr-1"></i> View Projects</button>`
                 : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
-            projSupp.innerHTML = `
-                <div class="grid grid-cols-5 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
-                    <span>Plant</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span>
-                </div>
-                ${summaryPlants.map(p => {
-                    const d = projectByPlant[p] || {};
-                    return `<div class="grid grid-cols-5 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0">
-                        <span class="font-semibold text-white">${escapeHtml(p)}</span>
-                        <strong class="text-center text-blue-400">${d["In Progress"] || 0}</strong>
-                        <strong class="text-center text-amber-400">${d.Planning || 0}</strong>
-                        <strong class="text-center text-red-400">${d["On Hold"] || 0}</strong>
-                        <strong class="text-center text-emerald-400">${d.Completed || 0}</strong>
-                    </div>`;
-                }).join("")}
+            const compareProjectByPlant = {};
+            allSummaryPlants.forEach(p => compareProjectByPlant[p] = {"In Progress":0, Planning:0, "On Hold":0, Completed:0});
+            comparisonPr.forEach(pr => { const plant=normalizePlant(pr.plant); if(!compareProjectByPlant[plant]) return; const st=String(pr.status||'Planning').trim(); if(Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant],st)) compareProjectByPlant[plant][st]++; });
+            projSupp.innerHTML = isCompare ? `
+                <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryValue || 'Date 1')} vs ${escapeHtml(compareValue || 'Date 2')}</div>
+                <div class="grid grid-cols-6 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span>Period</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>
+                ${summaryPlants.map(p=>{const a=projectByPlant[p]||{},b=compareProjectByPlant[p]||{};return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-6 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryValue || 'Date 1')}</span><strong class="text-center text-blue-400">${a['In Progress']||0}</strong><strong class="text-center text-amber-400">${a.Planning||0}</strong><strong class="text-center text-red-400">${a['On Hold']||0}</strong><strong class="text-center text-emerald-400">${a.Completed||0}</strong></div><div class="grid grid-cols-6 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareValue || 'Date 2')}</span><strong class="text-center text-blue-300">${b['In Progress']||0}</strong><strong class="text-center text-amber-300">${b.Planning||0}</strong><strong class="text-center text-red-300">${b['On Hold']||0}</strong><strong class="text-center text-emerald-300">${b.Completed||0}</strong></div></div>`;}).join('')}
+                ${projectViewAction}` : `
+                <div class="grid grid-cols-5 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>
+                ${summaryPlants.map(p=>{const d=projectByPlant[p]||{};return `<div class="grid grid-cols-5 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0"><span class="font-semibold text-white">${escapeHtml(p)}</span><strong class="text-center text-blue-400">${d['In Progress']||0}</strong><strong class="text-center text-amber-400">${d.Planning||0}</strong><strong class="text-center text-red-400">${d['On Hold']||0}</strong><strong class="text-center text-emerald-400">${d.Completed||0}</strong></div>`;}).join('')}
                 ${projectViewAction}`;
+
+            const relBox = document.getElementById('summary-reliability-comparison');
+            if (relBox) relBox.classList.toggle('hidden', !isCompare);
 
             // Render summary charts. Project chart receives per-plant counts so the main plant filter
             // can show only the selected plant.
