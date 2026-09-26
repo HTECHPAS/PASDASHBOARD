@@ -1344,17 +1344,18 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs flex-wrap">
                             <i class="fa-solid fa-filter text-slate-400"></i>
                             <select id="uptime-filter-type" onchange="onUptimeFilterTypeChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
-                                <option value="month" class="bg-slate-800">Month Only</option>
-                                <option value="year" class="bg-slate-800">Year Only</option>
-                                <option value="compare" class="bg-slate-800">Compare (Month vs Month / Year vs Year)</option>
+                                <option value="all" class="bg-slate-800">All Time</option>
+                                <option value="year" class="bg-slate-800">Filter by Year</option>
+                                <option value="month" class="bg-slate-800">Filter by Month</option>
+                                <option value="compare-year" class="bg-slate-800">Compare Year vs Year</option>
+                                <option value="compare-month" class="bg-slate-800">Compare Month vs Month</option>
                             </select>
 
-                            <input type="month" id="uptime-month-filter" onchange="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
                             <input type="number" id="uptime-year-filter" min="2000" max="2100" placeholder="YYYY" oninput="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden w-16">
-
+                            <input type="month" id="uptime-month-filter" onchange="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden">
                             <span id="compare-label" class="text-slate-400 hidden font-bold">vs</span>
-                            <input type="month" id="uptime-compare-month" onchange="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden">
                             <input type="number" id="uptime-compare-year" min="2000" max="2100" placeholder="YYYY" oninput="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden w-16">
+                            <input type="month" id="uptime-compare-month" onchange="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden">
 
                             <button onclick="resetUptimeFilter()" class="text-slate-400 hover:text-white pl-1 text-[10px]" title="Clear Filter">
                                 <i class="fa-solid fa-xmark"></i>
@@ -3110,6 +3111,21 @@ window.addEventListener("cloudsync:status", (event) => {
         // --- MODULE 0: SUMMARY ---
         function renderSummaryModule() {
             const fType = document.getElementById("summary-filter-type").value;
+            // Mirror the Executive Summary period selection into Uptime/Downtime.
+            if (!window._syncingDashboardFilters) {
+                window._syncingDashboardFilters = true;
+                const ut = document.getElementById("uptime-filter-type");
+                const uy = document.getElementById("uptime-year-filter");
+                const um = document.getElementById("uptime-month-filter");
+                const ucy = document.getElementById("uptime-compare-year");
+                const ucm = document.getElementById("uptime-compare-month");
+                if (ut) ut.value = fType;
+                if (uy) uy.value = document.getElementById("summary-year-filter")?.value || "";
+                if (um) um.value = document.getElementById("summary-month-filter")?.value || "";
+                if (ucy) ucy.value = document.getElementById("summary-compare-year")?.value || "";
+                if (ucm) ucm.value = document.getElementById("summary-compare-month")?.value || "";
+                window._syncingDashboardFilters = false;
+            }
             const yearVal = document.getElementById("summary-year-filter").value;
             const monthVal = document.getElementById("summary-month-filter").value;
             const compareYearVal = document.getElementById("summary-compare-year")?.value || "";
@@ -3139,6 +3155,15 @@ window.addEventListener("cloudsync:status", (event) => {
                 if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
                 return matchesSummaryDate(pr.date, primaryType, primaryValue);
             });
+
+            const comparisonEq = isCompare ? equipmentList.filter(eq => {
+                if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
+                return matchesSummaryDate(eq.extCalib || eq.extSched || eq.intCalib || eq.intSched, compareType, compareValue);
+            }) : [];
+            const comparisonPr = isCompare ? projectsList.filter(pr => {
+                if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
+                return matchesSummaryDate(pr.date, compareType, compareValue);
+            }) : [];
 
             const comparisonDt = isCompare ? downtimeLogs.filter(dt => {
                 if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
@@ -3338,12 +3363,28 @@ window.addEventListener("cloudsync:status", (event) => {
                 }).join("")}
                 ${projectViewAction}`;
 
-            // Render summary charts. Project chart receives per-plant counts so the main plant filter
-            // can show only the selected plant.
-            renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, sortedLinePareto, currentPlant, paretoComparison);
+            // Build the second period's calibration/project datasets for comparison graphs.
+            let compareDone = 0, compareScheduled = 0;
+            comparisonEq.forEach(eq => {
+                [getSubCalibStatus(eq.extSched, eq.extCalib), getSubCalibStatus(eq.intSched, eq.intCalib)].forEach(st => {
+                    if (st === "NA") return;
+                    compareScheduled++;
+                    if (st === "DONE" || st === "OVERDUE, DONE") compareDone++;
+                });
+            });
+            const compareProjectByPlant = {};
+            allSummaryPlants.forEach(p => compareProjectByPlant[p] = { "In Progress": 0, Planning: 0, "On Hold": 0, Completed: 0 });
+            comparisonPr.forEach(pr => {
+                const plant = normalizePlant(pr.plant);
+                const status = String(pr.status || "Planning").trim();
+                if (compareProjectByPlant[plant] && Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant], status)) compareProjectByPlant[plant][status]++;
+            });
+
+            // Render summary charts. Project and calibration charts compare both selected periods.
+            renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, sortedLinePareto, currentPlant, paretoComparison, isCompare ? compareDone : null, isCompare ? Math.max(0, compareScheduled - compareDone) : null, compareProjectByPlant, isCompare ? compareValue : null);
         }
 
-        function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison) {
+        function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel) {
             const calibCanvas = document.getElementById('chart-summary-calib');
             const projCanvas = document.getElementById('chart-summary-projects');
             const paretoCanvas = document.getElementById('chart-summary-pareto');
@@ -3353,8 +3394,14 @@ window.addEventListener("cloudsync:status", (event) => {
             const ctxCalib = calibCanvas.getContext('2d');
             if (chartSummaryCalib) chartSummaryCalib.destroy();
             chartSummaryCalib = new Chart(ctxCalib, {
-                type: 'doughnut',
-                data: {
+                type: paretoComparison ? 'bar' : 'doughnut',
+                data: paretoComparison ? {
+                    labels: [paretoComparison.primaryLabel, paretoComparison.compareLabel],
+                    datasets: [
+                        { label: 'DONE', data: [cDone, compareDone || 0], backgroundColor: '#22c55e', borderRadius: 4 },
+                        { label: 'REMAINING', data: [cRemaining, compareRemaining || 0], backgroundColor: '#334155', borderRadius: 4 }
+                    ]
+                } : {
                     labels: ['DONE', 'REMAINING'],
                     datasets: [{
                         data: [cDone, cRemaining],
@@ -3365,7 +3412,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    cutout: '68%',
+                    ...(paretoComparison ? { scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.35)' } } } } : { cutout: '68%' }),
                     plugins: {
                         legend: { position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
                         tooltip: { callbacks: {
@@ -3389,16 +3436,27 @@ window.addEventListener("cloudsync:status", (event) => {
                 : allSummaryPlants;
             const chartLabels = chartPlants.map(p => p === 'PreMix' ? 'PreMix Plant' : p);
             const getSeries = key => chartPlants.map(p => Number(projectByPlant?.[p]?.[key] || 0));
+            const getCompareSeries = key => chartPlants.map(p => Number(compareProjectByPlant?.[p]?.[key] || 0));
+            const projectDatasets = paretoComparison ? [
+                { label: `${paretoComparison.primaryLabel} - In Progress`, data: getSeries('In Progress'), backgroundColor: '#3b82f6', borderRadius: 4 },
+                { label: `${paretoComparison.primaryLabel} - Planning`, data: getSeries('Planning'), backgroundColor: '#eab308', borderRadius: 4 },
+                { label: `${paretoComparison.primaryLabel} - On Hold`, data: getSeries('On Hold'), backgroundColor: '#ef4444', borderRadius: 4 },
+                { label: `${paretoComparison.primaryLabel} - Completed`, data: getSeries('Completed'), backgroundColor: '#22c55e', borderRadius: 4 },
+                { label: `${comparePeriodLabel} - In Progress`, data: getCompareSeries('In Progress'), backgroundColor: '#60a5fa', borderRadius: 4 },
+                { label: `${comparePeriodLabel} - Planning`, data: getCompareSeries('Planning'), backgroundColor: '#facc15', borderRadius: 4 },
+                { label: `${comparePeriodLabel} - On Hold`, data: getCompareSeries('On Hold'), backgroundColor: '#f87171', borderRadius: 4 },
+                { label: `${comparePeriodLabel} - Completed`, data: getCompareSeries('Completed'), backgroundColor: '#4ade80', borderRadius: 4 }
+            ] : [
+                { label: 'In Progress', data: getSeries('In Progress'), backgroundColor: '#3b82f6', borderRadius: 4 },
+                { label: 'Planning', data: getSeries('Planning'), backgroundColor: '#eab308', borderRadius: 4 },
+                { label: 'On Hold', data: getSeries('On Hold'), backgroundColor: '#ef4444', borderRadius: 4 },
+                { label: 'Completed', data: getSeries('Completed'), backgroundColor: '#22c55e', borderRadius: 4 }
+            ];
             chartSummaryProjects = new Chart(ctxProj, {
                 type: 'bar',
                 data: {
                     labels: chartLabels,
-                    datasets: [
-                        { label: 'In Progress', data: getSeries('In Progress'), backgroundColor: '#3b82f6', borderRadius: 4 },
-                        { label: 'Planning', data: getSeries('Planning'), backgroundColor: '#eab308', borderRadius: 4 },
-                        { label: 'On Hold', data: getSeries('On Hold'), backgroundColor: '#ef4444', borderRadius: 4 },
-                        { label: 'Completed', data: getSeries('Completed'), backgroundColor: '#22c55e', borderRadius: 4 }
-                    ]
+                    datasets: projectDatasets
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
@@ -3407,8 +3465,8 @@ window.addEventListener("cloudsync:status", (event) => {
                         tooltip: { mode: 'index', intersect: false }
                     },
                     scales: {
-                        x: { stacked: true, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { stacked: true, beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.4)' } }
+                        x: { stacked: !paretoComparison, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
+                        y: { stacked: !paretoComparison, beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.4)' } }
                     }
                 }
             });
@@ -3885,38 +3943,35 @@ window.addEventListener("cloudsync:status", (event) => {
             const compareMonth = document.getElementById("uptime-compare-month");
             const compareYear = document.getElementById("uptime-compare-year");
 
-            monthInput.classList.add("hidden");
-            yearInput.classList.add("hidden");
-            compareLbl.classList.add("hidden");
-            compareMonth.classList.add("hidden");
-            compareYear.classList.add("hidden");
+            [monthInput, yearInput, compareLbl, compareMonth, compareYear].forEach(el => el.classList.add("hidden"));
+            const now = new Date();
+            const thisYear = now.getFullYear();
+            const thisMonth = `${thisYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-            if (fType === "month") {
-                monthInput.classList.remove("hidden");
-                if (!monthInput.value) {
-                    const now = new Date();
-                    monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                }
-            } else if (fType === "year") {
+            if (fType === "year") {
                 yearInput.classList.remove("hidden");
-                if (!yearInput.value) yearInput.value = new Date().getFullYear();
-            } else if (fType === "compare") {
+                if (!yearInput.value) yearInput.value = thisYear;
+            } else if (fType === "month") {
+                monthInput.classList.remove("hidden");
+                if (!monthInput.value) monthInput.value = thisMonth;
+            } else if (fType === "compare-year") {
+                yearInput.classList.remove("hidden");
+                compareLbl.classList.remove("hidden");
+                compareYear.classList.remove("hidden");
+                if (!yearInput.value) yearInput.value = thisYear;
+                if (!compareYear.value) compareYear.value = thisYear - 1;
+            } else if (fType === "compare-month") {
                 monthInput.classList.remove("hidden");
                 compareLbl.classList.remove("hidden");
                 compareMonth.classList.remove("hidden");
-                if (!monthInput.value) {
-                    const now = new Date();
-                    monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                }
-                if (!compareMonth.value) {
-                    compareMonth.value = `${new Date().getFullYear()-1}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-                }
+                if (!monthInput.value) monthInput.value = thisMonth;
+                if (!compareMonth.value) compareMonth.value = `${thisYear - 1}-${String(now.getMonth() + 1).padStart(2, '0')}`;
             }
             renderDowntimeModule();
         }
 
         function resetUptimeFilter() {
-            document.getElementById("uptime-filter-type").value = "month";
+            document.getElementById("uptime-filter-type").value = "all";
             onUptimeFilterTypeChange();
         }
 
@@ -3925,12 +3980,36 @@ window.addEventListener("cloudsync:status", (event) => {
             const monthVal = document.getElementById("uptime-month-filter").value;
             const yearVal = document.getElementById("uptime-year-filter").value;
             const compareMonthVal = document.getElementById("uptime-compare-month").value;
+            const compareYearVal = document.getElementById("uptime-compare-year").value;
             const search = document.getElementById("dt-history-search").value.toLowerCase();
 
-            // Set initial default month if empty
-            if (!monthVal && (fType === "month" || fType === "compare")) {
-                const now = new Date();
-                document.getElementById("uptime-month-filter").value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            // Keep Uptime/Downtime on the same period selection as Executive Summary.
+            const setUptimeFilterVisibility = () => {
+                const monthInput = document.getElementById("uptime-month-filter");
+                const yearInput = document.getElementById("uptime-year-filter");
+                const compareLbl = document.getElementById("compare-label");
+                const compareMonth = document.getElementById("uptime-compare-month");
+                const compareYear = document.getElementById("uptime-compare-year");
+                [monthInput, yearInput, compareLbl, compareMonth, compareYear].forEach(el => el?.classList.add("hidden"));
+                if (fType === "year") yearInput?.classList.remove("hidden");
+                if (fType === "month") monthInput?.classList.remove("hidden");
+                if (fType === "compare-year") { yearInput?.classList.remove("hidden"); compareLbl?.classList.remove("hidden"); compareYear?.classList.remove("hidden"); }
+                if (fType === "compare-month") { monthInput?.classList.remove("hidden"); compareLbl?.classList.remove("hidden"); compareMonth?.classList.remove("hidden"); }
+            };
+            setUptimeFilterVisibility();
+            if (!window._syncingDashboardFilters) {
+                window._syncingDashboardFilters = true;
+                const st = document.getElementById("summary-filter-type");
+                const sy = document.getElementById("summary-year-filter");
+                const sm = document.getElementById("summary-month-filter");
+                const scy = document.getElementById("summary-compare-year");
+                const scm = document.getElementById("summary-compare-month");
+                if (st) st.value = fType;
+                if (sy) sy.value = yearVal || sy.value;
+                if (sm) sm.value = monthVal || sm.value;
+                if (scy) scy.value = compareYearVal || scy.value;
+                if (scm) scm.value = compareMonthVal || scm.value;
+                window._syncingDashboardFilters = false;
             }
 
             const primaryLogs = downtimeLogs.filter(dt => {
@@ -3939,13 +4018,10 @@ window.addEventListener("cloudsync:status", (event) => {
                     const txt = `${dt.code} ${dt.equipment} ${dt.line} ${dt.category} ${dt.notes}`.toLowerCase();
                     if (!txt.includes(search)) return false;
                 }
-                if (fType === "month") {
-                    return dt.start.startsWith(document.getElementById("uptime-month-filter").value);
-                } else if (fType === "year") {
-                    return dt.start.startsWith(yearVal);
-                } else if (fType === "compare") {
-                    return dt.start.startsWith(document.getElementById("uptime-month-filter").value);
-                }
+                if (fType === "month") return dt.start.startsWith(monthVal);
+                if (fType === "year") return dt.start.startsWith(yearVal);
+                if (fType === "compare-year") return dt.start.startsWith(yearVal);
+                if (fType === "compare-month") return dt.start.startsWith(monthVal);
                 return true;
             });
 
@@ -3970,11 +4046,11 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Handle Compare Mode analysis
             const compCard = document.getElementById("comparison-result-card");
-            if (fType === "compare") {
+            if (fType === "compare-year" || fType === "compare-month") {
                 compCard.classList.remove("hidden");
                 const compLogs = downtimeLogs.filter(dt => {
                     if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
-                    return dt.start.startsWith(compareMonthVal);
+                    return fType === "compare-year" ? dt.start.startsWith(compareYearVal) : dt.start.startsWith(compareMonthVal);
                 });
                 let compHrs = 0;
                 compLogs.forEach(dt => {
@@ -3990,7 +4066,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 const diffHrs = (totalHrs - compHrs).toFixed(1);
 
                 document.getElementById("comparison-result-text").innerHTML = `
-                    Comparing <strong>${document.getElementById("uptime-month-filter").value}</strong> (${uptimePct}% uptime, ${totalHrs.toFixed(1)} hrs downtime) against <strong>${compareMonthVal}</strong> (${compUptime}% uptime, ${compHrs.toFixed(1)} hrs downtime).<br>
+                    Comparing <strong>${fType === "compare-year" ? yearVal : monthVal}</strong> (${uptimePct}% uptime, ${totalHrs.toFixed(1)} hrs downtime) against <strong>${fType === "compare-year" ? compareYearVal : compareMonthVal}</strong> (${compUptime}% uptime, ${compHrs.toFixed(1)} hrs downtime).<br>
                     Uptime Variance: <strong class="${diffPct >= 0 ? 'text-emerald-400' : 'text-red-400'}">${diffPct >= 0 ? '+' : ''}${diffPct}%</strong> | Downtime Variance: <strong class="${diffHrs <= 0 ? 'text-emerald-400' : 'text-red-400'}">${diffHrs <= 0 ? '' : '+'}${diffHrs} hrs</strong>.
                 `;
             } else {
@@ -4074,6 +4150,12 @@ window.addEventListener("cloudsync:status", (event) => {
                     }
                 }
             });
+
+            // When the Uptime/Downtime filter is changed directly, refresh Executive Summary
+            // so both pages always show the same selected period.
+            if (!window._syncingDashboardFilters && typeof renderSummaryModule === "function") {
+                renderSummaryModule();
+            }
         }
 
         function openDowntimeForm() {
