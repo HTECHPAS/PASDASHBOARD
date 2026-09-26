@@ -1166,6 +1166,23 @@ window.addEventListener("cloudsync:status", (event) => {
                                     <p id="summary-dt-mttr" class="text-xl font-black text-amber-400 mt-0.5">0 mins</p>
                                     <p class="text-[10px] text-slate-500 mt-0.5">Average resolution response time</p>
                                 </div>
+                                <div id="summary-dt-comparison-cards" class="hidden sm:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-2 mt-0">
+                                    <div class="bg-blue-500/5 border border-blue-500/20 p-2.5 rounded-xl">
+                                        <span id="summary-dt-compare-label" class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">Comparison</span>
+                                        <p id="summary-dt-compare-hours" class="text-lg font-black text-blue-400 mt-0.5">0 hrs</p>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">Comparison downtime</p>
+                                    </div>
+                                    <div class="bg-blue-500/5 border border-blue-500/20 p-2.5 rounded-xl">
+                                        <span class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">Comparison MTBF</span>
+                                        <p id="summary-dt-compare-mtbf" class="text-lg font-black text-blue-400 mt-0.5">0 hrs</p>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">Average operational interval</p>
+                                    </div>
+                                    <div class="bg-blue-500/5 border border-blue-500/20 p-2.5 rounded-xl">
+                                        <span class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">Comparison MTTR</span>
+                                        <p id="summary-dt-compare-mttr" class="text-lg font-black text-blue-400 mt-0.5">0 mins</p>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">Average resolution response time</p>
+                                    </div>
+                                </div>
                             </div>
 
                             <div id="summary-per-plant-reports" class="space-y-3"></div>
@@ -3245,6 +3262,29 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("summary-dt-mtbf").innerText = `${mtbf} hrs`;
             document.getElementById("summary-dt-mttr").innerText = `${mttr} mins`;
 
+            // In comparison mode, show the second period's reliability metrics beside
+            // the primary period instead of only comparing the Pareto/table below.
+            const compareCard = document.getElementById("summary-dt-comparison-cards");
+            if (compareCard) {
+                if (isCompare) {
+                    let compareDtHours = 0;
+                    comparisonDt.forEach(dt => {
+                        const s = new Date(dt.start), e = new Date(dt.end);
+                        const diff = (e - s) / (1000 * 60 * 60);
+                        if (diff > 0) compareDtHours += diff;
+                    });
+                    const compareMtbf = comparisonDt.length > 0 ? (720 / comparisonDt.length).toFixed(1) : "0";
+                    const compareMttr = comparisonDt.length > 0 ? Math.round((compareDtHours / comparisonDt.length) * 60) : 0;
+                    compareCard.classList.remove("hidden");
+                    document.getElementById("summary-dt-compare-label").textContent = compareValue || "Comparison";
+                    document.getElementById("summary-dt-compare-hours").textContent = `${compareDtHours.toFixed(1)} hrs`;
+                    document.getElementById("summary-dt-compare-mtbf").textContent = `${compareMtbf} hrs`;
+                    document.getElementById("summary-dt-compare-mttr").textContent = `${compareMttr} mins`;
+                } else {
+                    compareCard.classList.add("hidden");
+                }
+            }
+
             // Pareto = total downtime by Line Category. Repeated records for the same line are added together.
             const sortedLinePareto = buildPareto(filteredDt);
             const sortedComparePareto = isCompare ? buildPareto(comparisonDt) : [];
@@ -3454,6 +3494,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const pOnHold = filteredPr.filter(pr => String(pr.status || "").trim() === "On Hold").length;
             const pCompleted = filteredPr.filter(pr => String(pr.status || "").trim() === "Completed").length;
 
+            const compareProjectPeriodByPlant = compareProjectByPlant;
             const projectPeriodLabel = document.getElementById("summary-project-period-label");
             if (projectPeriodLabel) projectPeriodLabel.textContent = isCompare ? `${primaryValue} vs ${compareValue}` : (primaryValue || "All Time");
 
@@ -3561,6 +3602,67 @@ window.addEventListener("cloudsync:status", (event) => {
             box('chart-summary-pareto', rows.length ? rows.map(([line,v])=>`<div class="mb-2">${makeBar(line,v.p,max,'bg-amber-500')}${paretoComparison?makeBar((comparePeriodLabel||'Compare')+' • '+line,v.c,max,'bg-blue-500'):''}</div>`).join('') : '<div class="text-slate-500 text-xs text-center py-8">No downtime data for this period.</div>');
         }
 
+        function renderSummaryDataFallback(canvas, config, chartName) {
+            if (!canvas || !canvas.parentElement) return;
+            canvas.style.display = 'none';
+            let host = canvas.parentElement.querySelector('.summary-fallback-chart');
+            if (!host) {
+                host = document.createElement('div');
+                host.className = 'summary-fallback-chart w-full overflow-auto';
+                host.style.minHeight = '150px';
+                host.style.maxHeight = '175px';
+                host.style.display = 'block';
+                canvas.parentElement.appendChild(host);
+            }
+            const data = config?.data || {};
+            const labels = Array.isArray(data.labels) ? data.labels : [];
+            const datasets = Array.isArray(data.datasets) ? data.datasets : [];
+            const rows = labels.map((label, i) => ({
+                label: String(label),
+                values: datasets.map(ds => Number(ds?.data?.[i] || 0)),
+                names: datasets.map(ds => String(ds?.label || 'Value'))
+            }));
+            const max = Math.max(1, ...rows.flatMap(r => r.values));
+            const isPareto = String(chartName).toLowerCase().includes('pareto');
+            const isProject = String(chartName).toLowerCase().includes('project');
+            const fmt = v => Number(v).toFixed(isPareto ? 1 : 0);
+            const make = (label, value, color) => {
+                const pct = Math.max(0, Math.min(100, (value / max) * 100));
+                return `<div class="flex items-center gap-2 mb-1.5 min-w-0">` +
+                    `<span class="w-28 shrink-0 truncate text-[9px] text-slate-300" title="${escapeHtml(label)}">${escapeHtml(label)}</span>` +
+                    `<div class="flex-1 h-3 bg-slate-900 rounded overflow-hidden"><div class="h-full" style="width:${pct}%;background:${color};"></div></div>` +
+                    `<span class="w-14 shrink-0 text-right text-[9px] text-slate-200 font-bold">${fmt(value)}</span></div>`;
+            };
+            const colors = ['#22c55e','#334155','#3b82f6','#eab308','#ef4444','#6366f1','#14b8a6','#f97316'];
+            let html = '';
+            if (!rows.length) {
+                html = '<div class="text-slate-500 text-xs text-center py-8">No data available for this period.</div>';
+            } else if (isProject) {
+                html = rows.map(r => {
+                    const total = Math.max(1, ...r.values);
+                    return `<div class="mb-2"><div class="text-[9px] text-slate-300 font-bold mb-1">${escapeHtml(r.label)}</div>` +
+                        r.values.map((v,j) => {
+                            const pct=Math.max(0,Math.min(100,(v/total)*100));
+                            return `<div class="flex items-center gap-2 mb-1"><span class="w-28 shrink-0 truncate text-[8px] text-slate-400">${escapeHtml(r.names[j])}</span><div class="flex-1 h-2.5 bg-slate-900 rounded overflow-hidden"><div class="h-full" style="width:${pct}%;background:${colors[j%colors.length]};"></div></div><span class="w-8 text-right text-[8px] text-slate-200 font-bold">${fmt(v)}</span></div>`;
+                        }).join('') + '</div>';
+                }).join('');
+            } else {
+                html = rows.map(r => r.values.map((v,j) => make(r.values.length > 1 ? `${r.label} • ${r.names[j]}` : r.label, v, colors[j%colors.length])).join('')).join('');
+            }
+            host.innerHTML = html;
+        }
+
+        function createSummaryChart(canvas, config, chartName) {
+            try {
+                if (typeof Chart === 'undefined') throw new Error('Chart.js is not loaded');
+                return new Chart(canvas.getContext('2d'), config);
+            } catch (error) {
+                console.error(`Executive Summary ${chartName} chart failed:`, error);
+                renderSummaryDataFallback(canvas, config, chartName);
+                return null;
+            }
+        }
+
         function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel) {
             if (typeof Chart === 'undefined') {
                 renderSummaryFallbackCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison, compareDone, compareRemaining, compareProjectByPlant, comparePeriodLabel);
@@ -3576,14 +3678,22 @@ window.addEventListener("cloudsync:status", (event) => {
 
             [calibCanvas, projCanvas, paretoCanvas].forEach(canvas => {
                 canvas.style.display = 'block';
+                canvas.style.width = '100%';
+                canvas.style.height = '175px';
                 const fallback = canvas.parentElement?.querySelector('.summary-fallback-chart');
                 if (fallback) fallback.remove();
+                // Chart.js keeps a registry entry for every canvas. Destroy the
+                // registered chart as well as our local reference before redraw.
+                try {
+                    const existing = Chart.getChart(canvas);
+                    if (existing) existing.destroy();
+                } catch (_) {}
             });
 
             // 1) Calibration completion — no overdue categories.
             const ctxCalib = calibCanvas.getContext('2d');
             if (chartSummaryCalib) chartSummaryCalib.destroy();
-            chartSummaryCalib = new Chart(ctxCalib, {
+            chartSummaryCalib = createSummaryChart(calibCanvas, {
                 type: paretoComparison ? 'bar' : 'doughnut',
                 data: paretoComparison ? {
                     labels: [paretoComparison.primaryLabel, paretoComparison.compareLabel],
@@ -3642,7 +3752,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 { label: 'On Hold', data: getSeries('On Hold'), backgroundColor: '#ef4444', borderRadius: 4 },
                 { label: 'Completed', data: getSeries('Completed'), backgroundColor: '#22c55e', borderRadius: 4 }
             ];
-            chartSummaryProjects = new Chart(ctxProj, {
+            chartSummaryProjects = createSummaryChart(projCanvas, {
                 type: 'bar',
                 data: {
                     labels: chartLabels,
@@ -3688,13 +3798,13 @@ window.addEventListener("cloudsync:status", (event) => {
                 datasets.push({ label: 'Downtime (hrs)', data: primaryData, backgroundColor: '#f59e0b', borderRadius: 4, maxBarThickness: 22, order: 2 });
             }
             datasets.push({ type: 'line', label: paretoComparison ? 'Cumulative % (combined)' : 'Cumulative %', data: paretoRows.length ? cumulativePct : [0], borderColor: '#38bdf8', backgroundColor: '#38bdf8', borderWidth: 2, pointRadius: 2, tension: 0.25, yAxisID: 'y1', order: 1 });
-            chartSummaryPareto = new Chart(ctxPareto, {
+            chartSummaryPareto = createSummaryChart(paretoCanvas, {
                 type: 'bar',
                 data: { labels, datasets },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: { legend: { display: false }, tooltip: { callbacks: {
-                        label: ctx => ctx.dataset.label === 'Cumulative %' ? `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%` : `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)} hrs`
+                        label: ctx => String(ctx.dataset.label || '').startsWith('Cumulative %') ? `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%` : `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)} hrs`
                     }}},
                     scales: {
                         x: { ticks: { font: { size: 8 }, color: '#94a3b8' }, grid: { display: false } },
