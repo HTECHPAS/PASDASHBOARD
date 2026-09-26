@@ -1280,8 +1280,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                 <input type="text" id="calib-search" oninput="renderCalibTable()" placeholder="Search Equipment Code, Category, Calibrator..." class="w-full bg-slate-900 border border-slate-700 text-xs rounded-xl pl-9 pr-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
                             <select id="calib-filter-status" onchange="renderCalibTable()" class="bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="ALL">All Overall Statuses</option>
-                                <option value="DONE">DONE</option>
+                                                                <option value="DONE">DONE</option>
                                 <option value="OVERDUE, DONE">OVERDUE, DONE</option>
                                 <option value="OVERDUE">OVERDUE</option>
                                 <option value="PENDING">PENDING (&lt;3 mos)</option>
@@ -3563,7 +3562,7 @@ window.addEventListener("cloudsync:status", (event) => {
             tbody.innerHTML = "";
 
             if (groups.size === 0) {
-                tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-slate-500 italic">No equipment entries found matching criteria.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="11" class="text-center py-6 text-slate-500 italic">No equipment entries found matching criteria.</td></tr>`;
                 return;
             }
 
@@ -3571,8 +3570,6 @@ window.addEventListener("cloudsync:status", (event) => {
                 const first = group[0];
                 const extSt = getSubCalibStatus(first.extSched, first.extCalib);
                 const intSt = getSubCalibStatus(first.intSched, first.intCalib);
-                const statuses = group.map(eq => getCalibStatus(eq));
-                const overall = statuses.every(s => s === statuses[0]) ? statuses[0] : "MIXED";
                 const actionId = first.id;
 
                 const badgeColors = {
@@ -4551,7 +4548,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
             if (modName === 'calibration') {
                 filename = "Calibration_Tracker.xlsx";
-                wsData = [["Plant", "Equipment Code", "Category", "PR No", "PO No", "EXT Sched", "EXT Calib", "EXT Vendor", "INT Sched", "INT Calib", "INT Technician", "Overall Status"]];
+                wsData = [["Plant", "Equipment Code", "Category", "PR No", "PO No", "EXT Sched", "EXT Calib", "EXT Vendor", "INT Sched", "INT Calib", "INT Technician"]];
                 equipmentList.forEach(eq => {
                     if (currentPlant === "ALL" || eq.plant === currentPlant) {
                         wsData.push([eq.plant, eq.code, eq.type, eq.pr, eq.po, eq.extSched, eq.extCalib, eq.extBy, eq.intSched, eq.intCalib, eq.intBy, getCalibStatus(eq)]);
@@ -4595,7 +4592,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const wb = XLSX.utils.book_new();
 
             // Sheet 1: Calibration
-            const wsCalibData = [["Plant", "Equipment Code", "Category", "PR No", "PO No", "EXT Sched", "EXT Calib", "EXT Vendor", "INT Sched", "INT Calib", "INT Technician", "Overall Status"]];
+            const wsCalibData = [["Plant", "Equipment Code", "Category", "PR No", "PO No", "EXT Sched", "EXT Calib", "EXT Vendor", "INT Sched", "INT Calib", "INT Technician"]];
             equipmentList.forEach(eq => {
                 wsCalibData.push([eq.plant, eq.code, eq.type, eq.pr, eq.po, eq.extSched, eq.extCalib, eq.extBy, eq.intSched, eq.intCalib, eq.intBy, getCalibStatus(eq)]);
             });
