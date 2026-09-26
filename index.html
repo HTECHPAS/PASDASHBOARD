@@ -3847,7 +3847,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:9,padding:6,font:{size:7},color:'#94a3b8'}}},scales:{x:{stacked:true,ticks:{font:{size:8},color:'#94a3b8'},grid:{display:false}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:8},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,.35)'}}}}
             });
 
-            // Downtime Pareto — Top 3 Equipment + Other.
+            // Downtime Pareto — Top 3 Lines + Other.
             // IMPORTANT: use the exact same filtered downtime totals as the
             // Line Category Pareto above. This guarantees the equipment Pareto
             // total and cumulative percentage cannot show 0.0 when the Line
@@ -3860,12 +3860,12 @@ window.addEventListener("cloudsync:status", (event) => {
             const buildTop3PlusOther = (logs, referenceTotal) => {
                 const map = {};
                 (logs || []).forEach(dt => {
-                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g,' ');
+                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g,' ');
                     const d = Math.max(0,(new Date(dt.end)-new Date(dt.start))/(1000*60*60));
-                    if (d > 0) map[equipment] = (map[equipment] || 0) + d;
+                    if (d > 0) map[line] = (map[line] || 0) + d;
                 });
                 const all = Object.entries(map)
-                    .map(([equipment,duration])=>({equipment,duration}))
+                    .map(([line,duration])=>({line,duration}))
                     .sort((a,b)=>b.duration-a.duration);
                 const rawTotal = all.reduce((sum,x)=>sum+x.duration,0);
                 // The Line Category Pareto is the source of truth for the selected
@@ -3876,7 +3876,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 const top3 = all.slice(0,3);
                 const top3Hours = top3.reduce((sum,x)=>sum+x.duration,0);
                 const otherHours = Math.max(0,total-top3Hours);
-                const items = [...top3,{equipment:'Other',duration:otherHours}];
+                const items = [...top3,{line:'Other',duration:otherHours}];
                 let running = 0;
                 items.forEach(x=>{
                     running += x.duration;
@@ -3899,20 +3899,20 @@ window.addEventListener("cloudsync:status", (event) => {
             // Uptime/Downtime > Downtime Pareto by Line Category:
             // each period is independently ranked as Top 1, Top 2, Top 3, Other,
             // with its own cumulative percentage line.
-            const primaryRankItems = primaryPareto.items.filter(x=>x.equipment!=='Other').slice(0,3);
-            const compareRankItems = comparePareto.items.filter(x=>x.equipment!=='Other').slice(0,3);
+            const primaryRankItems = primaryPareto.items.filter(x=>x.line!=='Other').slice(0,3);
+            const compareRankItems = comparePareto.items.filter(x=>x.line!=='Other').slice(0,3);
             const summaryParetoLabels = ['Top 1','Top 2','Top 3','Other'];
             const summaryPrimaryValues = [
                 primaryRankItems[0]?.duration || 0,
                 primaryRankItems[1]?.duration || 0,
                 primaryRankItems[2]?.duration || 0,
-                primaryPareto.items.find(x=>x.equipment==='Other')?.duration || 0
+                primaryPareto.items.find(x=>x.line==='Other')?.duration || 0
             ];
             const summaryCompareValues = [
                 compareRankItems[0]?.duration || 0,
                 compareRankItems[1]?.duration || 0,
                 compareRankItems[2]?.duration || 0,
-                comparePareto.items.find(x=>x.equipment==='Other')?.duration || 0
+                comparePareto.items.find(x=>x.line==='Other')?.duration || 0
             ];
             const summaryCumulative = values => {
                 const total = values.reduce((sum,v)=>sum+Number(v||0),0);
@@ -3928,11 +3928,11 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const summaryParetoSubtitle = document.getElementById('summary-pareto-subtitle');
             if (summaryParetoSubtitle) {
-                const primaryNames = primaryRankItems.map((x,i)=>`Top ${i+1}: ${x.equipment}`).join(' | ');
-                const compareNames = compareRankItems.map((x,i)=>`Top ${i+1}: ${x.equipment}`).join(' | ');
+                const primaryNames = primaryRankItems.map((x,i)=>`Top ${i+1}: ${x.line}`).join(' | ');
+                const compareNames = compareRankItems.map((x,i)=>`Top ${i+1}: ${x.line}`).join(' | ');
                 summaryParetoSubtitle.textContent = hasCompare
-                    ? `${p1}: ${primaryNames || 'No Equipment'} | Other VS ${p2}: ${compareNames || 'No Equipment'} | Other`
-                    : `${primaryNames || 'No Equipment'} | Other`;
+                    ? `${p1}: ${primaryNames || 'No Line'} | Other VS ${p2}: ${compareNames || 'No Line'} | Other`
+                    : `${primaryNames || 'No Line'} | Other`;
             }
 
             const ctxPareto = paretoCanvas.getContext('2d');
@@ -4584,12 +4584,12 @@ window.addEventListener("cloudsync:status", (event) => {
             // Downtime Pareto by Line Category remains the reference total.
             // For comparison mode, show EXACTLY: Period 1 Top 3 Equipment + Other
             // as bars VS Period 2 Top 3 Equipment + Other as bars.
-            const buildEquipmentTop3Other = logs => {
+            const buildLineTop3Other = logs => {
                 const map = {};
                 (logs || []).forEach(dt => {
-                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
                     const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
-                    if (dur > 0) map[equipment] = (map[equipment] || 0) + dur;
+                    if (dur > 0) map[line] = (map[line] || 0) + dur;
                 });
                 const all = Object.entries(map).sort((a,b) => b[1] - a[1]);
                 const total = all.reduce((sum,[,hrs]) => sum + Number(hrs || 0), 0);
@@ -4598,32 +4598,32 @@ window.addEventListener("cloudsync:status", (event) => {
                 return { top3, other: Math.max(0, total - top3Total), total };
             };
 
-            const eqParetoPrimary = buildEquipmentTop3Other(primaryLogs);
-            const eqParetoCompare = buildEquipmentTop3Other(uptimeCompareLogs);
+            const eqParetoPrimary = buildLineTop3Other(primaryLogs);
+            const eqParetoCompare = buildLineTop3Other(uptimeCompareLogs);
             const isDtCompare = fType === 'compare-year' || fType === 'compare-month';
             const periodPrimaryLabel = fType === 'compare-year' ? String(yearVal) : fType === 'compare-month' ? String(monthVal) : fType === 'year' ? String(yearVal) : fType === 'month' ? String(monthVal) : 'Selected Period';
             const periodCompareLabel = fType === 'compare-year' ? String(compareYearVal) : fType === 'compare-month' ? String(compareMonthVal) : 'Comparison';
 
             // Build exactly four ranked buckets for EACH selected period:
-            // Top Equipment #1, #2, #3, and Other.  Each period is ranked independently.
+            // Top Line #1, #2, #3, and Other. Each period is ranked independently.
             // This keeps the comparison fair even when the top equipment names differ.
             const primaryItems = eqParetoPrimary.top3.map(([equipment,hrs], i) => ({
-                rank: i + 1, equipment, hrs: Number(hrs || 0)
+                rank: i + 1, line: equipment, hrs: Number(hrs || 0)
             }));
             const compareItems = eqParetoCompare.top3.map(([equipment,hrs], i) => ({
-                rank: i + 1, equipment, hrs: Number(hrs || 0)
+                rank: i + 1, line: equipment, hrs: Number(hrs || 0)
             }));
 
             const primaryRankLabels = [1,2,3].map(rank => {
                 const item = primaryItems.find(x => x.rank === rank);
-                return item ? `#${rank} ${item.equipment}` : `#${rank} No Equipment`;
+                return item ? `#${rank} ${item.line}` : `#${rank} No Line`;
             });
             const compareRankLabels = [1,2,3].map(rank => {
                 const item = compareItems.find(x => x.rank === rank);
-                return item ? `#${rank} ${item.equipment}` : `#${rank} No Equipment`;
+                return item ? `#${rank} ${item.line}` : `#${rank} No Line`;
             });
 
-            // Use rank-based categories so each date has its own Top 3 + Other,
+            // Use rank-based categories so each date has its own Top 3 Lines + Other,
             // while the bars remain directly comparable by rank.
             const equipmentLabels = ['Top 1', 'Top 2', 'Top 3', 'Other'];
             const primaryValues = [
@@ -4656,8 +4656,8 @@ window.addEventListener("cloudsync:status", (event) => {
             const dtParetoTitle = document.getElementById('dt-pareto-title');
             if (dtParetoTitle) {
                 dtParetoTitle.textContent = isDtCompare
-                    ? `Downtime Pareto — Top 3 Equipment + Other | ${periodPrimaryLabel}: ${eqParetoPrimary.total.toFixed(1)} hrs VS ${periodCompareLabel}: ${eqParetoCompare.total.toFixed(1)} hrs`
-                    : `Downtime Pareto — Top 3 Equipment + Other | ${periodPrimaryLabel} Total: ${eqParetoPrimary.total.toFixed(1)} hrs`;
+                    ? `Downtime Pareto — Top 3 Lines + Other | ${periodPrimaryLabel}: ${eqParetoPrimary.total.toFixed(1)} hrs VS ${periodCompareLabel}: ${eqParetoCompare.total.toFixed(1)} hrs`
+                    : `Downtime Pareto — Top 3 Lines + Other | ${periodPrimaryLabel} Total: ${eqParetoPrimary.total.toFixed(1)} hrs`;
             }
 
             const dtParetoSubtitle = document.getElementById('dt-pareto-subtitle');
@@ -4665,8 +4665,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 const pNames = primaryRankLabels.join(' | ');
                 const cNames = compareRankLabels.join(' | ');
                 dtParetoSubtitle.textContent = isDtCompare
-                    ? `${periodPrimaryLabel}: ${pNames} | Other VS ${periodCompareLabel}: ${cNames} | Other`
-                    : `${pNames} | Other`;
+                    ? `${periodPrimaryLabel}: ${pNames} + Other VS ${periodCompareLabel}: ${cNames} + Other`
+                    : `${pNames} + Other`;
             }
 
             chartDowntimePareto = new Chart(ctxDowntimePareto, {
